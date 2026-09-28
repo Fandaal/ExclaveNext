@@ -86,6 +86,10 @@
     <string name="server_address">Сервер</string>
     <string name="profile_name">Имя профиля</string>
     <string name="connection_test_url">URL-адрес проверки подключения</string>
+    <string name="connection_test_custom_concurrency">Потоки проверки URL</string>
+    <string name="connection_test_custom_concurrency_invalid">Поточность должна быть положительным целым числом</string>
+    <string name="connection_test_custom_timeout">Таймаут проверки URL (мс)</string>
+    <string name="connection_test_custom_timeout_invalid">Таймаут должен быть положительным целым числом</string>
     <string name="port_transproxy">Порт транспрокси</string>
     <string name="port_proxy">Порт прокси SOCKS5</string>
     <string name="service_mode_vpn">VPN</string>

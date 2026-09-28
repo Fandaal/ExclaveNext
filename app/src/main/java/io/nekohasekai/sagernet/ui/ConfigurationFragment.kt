@@ -842,9 +842,9 @@ class ConfigurationFragment @JvmOverloads constructor(
             //stopService()
 
             val link = DataStore.connectionTestURL
-            val timeout = 5000
+            val timeout = DataStore.connectionTestTimeout
 
-            repeat(6) {
+            repeat(DataStore.connectionTestConcurrency) {
                 testJobs.add(launch {
                     while (isActive) {
                         val profile = profiles.poll() ?: break

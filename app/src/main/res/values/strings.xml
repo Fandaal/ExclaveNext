@@ -86,6 +86,10 @@
     <string name="require_transproxy">Enable transparent proxy inbound</string>
     <string name="transproxy_mode">Transparent proxy mode</string>
     <string name="connection_test_url">Connection test URL</string>
+    <string name="connection_test_custom_concurrency">URL test concurrency</string>
+    <string name="connection_test_custom_concurrency_invalid">Concurrency must be a positive integer</string>
+    <string name="connection_test_custom_timeout">URL test timeout (ms)</string>
+    <string name="connection_test_custom_timeout_invalid">Timeout must be a positive integer</string>
     <string name="probe_url">Custom test URL</string>
     <!-- proxy category -->
     <string name="profile_name">Profile name</string>

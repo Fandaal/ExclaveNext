@@ -269,7 +269,7 @@ class BaseService {
             val v2rayPoint = data?.proxy?.v2rayPoint ?: error("core not started")
             try {
                 return Libexclavecore.urlTest(
-                    v2rayPoint, TAG_SOCKS, DataStore.connectionTestURL, 5000
+                    v2rayPoint, TAG_SOCKS, DataStore.connectionTestURL, DataStore.connectionTestTimeout
                 )
             } catch (e: Exception) {
                 Logs.w(e)

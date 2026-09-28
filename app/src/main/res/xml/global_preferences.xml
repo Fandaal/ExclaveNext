@@ -226,6 +226,18 @@
             app:key="connectionTestURL"
             app:title="@string/connection_test_url"
             app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="6"
+            app:icon="@drawable/ic_baseline_multiple_stop_24"
+            app:key="connectionTestConcurrency"
+            app:title="@string/connection_test_custom_concurrency"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="5000"
+            app:icon="@drawable/ic_baseline_shutter_speed_24"
+            app:key="connectionTestTimeout"
+            app:title="@string/connection_test_custom_timeout"
+            app:useSimpleSummaryProvider="true" />
         <SwitchPreference
             app:icon="@drawable/baseline_construction_24"
             app:key="realityDisableX25519Mlkem768"

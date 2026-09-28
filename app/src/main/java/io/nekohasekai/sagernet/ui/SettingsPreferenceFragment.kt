@@ -28,6 +28,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.os.LocaleListCompat
@@ -227,6 +228,28 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
         mtu.isEnabled = serviceMode.value == MODE_VPN
         mtu.setOnBindEditTextListener(EditTextPreferenceModifiers.Number)
         mtu.onPreferenceChangeListener = reloadListener
+
+        // URL test settings
+        val connectionTestConcurrency = findPreference<EditTextPreference>(Key.CONNECTION_TEST_CONCURRENCY)!!
+        val connectionTestTimeout = findPreference<EditTextPreference>(Key.CONNECTION_TEST_TIMEOUT)!!
+        connectionTestConcurrency.setOnBindEditTextListener(EditTextPreferenceModifiers.Number)
+        connectionTestTimeout.setOnBindEditTextListener(EditTextPreferenceModifiers.Number)
+        connectionTestConcurrency.setOnPreferenceChangeListener { _, newValue ->
+            val value = (newValue as String).toIntOrNull()
+            if (value == null || value < 1) {
+                Toast.makeText(requireContext(), R.string.connection_test_custom_concurrency_invalid, Toast.LENGTH_LONG).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
+        }
+        connectionTestTimeout.setOnPreferenceChangeListener { _, newValue ->
+            val value = (newValue as String).toIntOrNull()
+            if (value == null || value < 1) {
+                Toast.makeText(requireContext(), R.string.connection_test_custom_timeout_invalid, Toast.LENGTH_LONG).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
+        }
         enableVPNInterfaceIPv6Address.isEnabled = serviceMode.value == MODE_VPN
         enableVPNInterfaceIPv6Address.onPreferenceChangeListener = reloadListener
         allowAppsBypassVpn.isEnabled = serviceMode.value == MODE_VPN
