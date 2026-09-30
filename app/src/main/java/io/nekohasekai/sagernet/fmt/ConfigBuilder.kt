@@ -257,7 +257,37 @@ fun buildV2RayConfig(
     }
 
     val routeMode = DataStore.routeMode
-    val proxies = proxy.resolveChain()
+    // Balancer as the entry (client-facing first hop) of an explicit proxy chain:
+    // [balancer, B, C, ...]. A balancer is a routing object, not an outbound, so the whole
+    // profile is built as a balancer whose members each get the chain tail (B, C, ...)
+    // appended, producing sub-chains  member -> B -> C -> internet. The balancer then
+    // selects among those sub-chains. entryBalancerTailList is stored exit-first (the order
+    // buildChain's sub-chain builder expects: profileList[0] is the internet-facing hop).
+    val entryBalancer: ProxyEntity? = if (proxy.type == ProxyEntity.TYPE_CHAIN) {
+        val firstId = proxy.chainBean!!.proxies.firstOrNull()
+        val first = firstId?.let { SagerDatabase.proxyDao.getById(it) }
+        if (first != null && first.type == ProxyEntity.TYPE_BALANCER) first else null
+    } else null
+
+    val entryBalancerTailList: List<ProxyEntity>? = if (entryBalancer != null) {
+        val tailIds = proxy.chainBean!!.proxies.drop(1)
+        val tailEntities = SagerDatabase.proxyDao.getEntities(tailIds).associateBy { it.id }
+        val expanded = ArrayList<ProxyEntity>()
+        tailIds.forEach { id ->
+            val item = tailEntities[id] ?: return@forEach
+            if (item.type == ProxyEntity.TYPE_BALANCER) error("only the first proxy of a chain may be a balancer")
+            if (item.type == ProxyEntity.TYPE_CONFIG && item.configBean!!.type == "v2ray") error("custom config in proxy chain is not supported")
+            if (!item.requireBean().canMapping()) error("${item.displayName()} can be the front proxy only")
+            when (item.type) {
+                ProxyEntity.TYPE_CHAIN -> expanded.addAll(item.resolveChainRecursively())
+                else -> expanded.add(item)
+            }
+        }
+        // expanded is UI order (mid -> exit); sub-chain build needs exit-first.
+        expanded.asReversed()
+    } else null
+
+    val proxies = if (entryBalancer != null) entryBalancer.resolveChain() else proxy.resolveChain()
     val extraRules = if (forTest || routeMode != RouteMode.RULE) listOf() else SagerDatabase.rulesDao.enabledRules()
     val extraProxies = if (forTest) mapOf() else SagerDatabase.proxyDao.getEntities(extraRules.mapNotNull { rule ->
         rule.outbound.takeIf { it > 0 && it != proxy.id }
@@ -601,7 +631,7 @@ fun buildV2RayConfig(
                     needGlobal = true
                 } else {
                     tagIn = if (index == 0) tagOutbound else {
-                        "$tagOutbound-${proxyEntity.id}"
+                        "via-$tagOutbound-${proxyEntity.id}"
                     }
                     needGlobal = false
                 }
@@ -2038,6 +2068,25 @@ fun buildV2RayConfig(
             if (isBalancer) {
                 val balancerBean = balancer()!!
 
+                // Balancer used as the entry (first, client-facing) hop of an explicit chain.
+                // Append the chain tail (exit-first) to each balancer member and build a
+                // sub-chain member -> ... -> exit -> internet; the balancer selects among them.
+                if (entryBalancerTailList != null && entryBalancerTailList.isNotEmpty()) {
+                    val originalMembers = profileList.toList()
+                    chainOutbounds.clear()
+                    for (mainProxy in originalMembers) {
+                        val subChainList = entryBalancerTailList.toMutableList() // exit-first
+                        subChainList.add(mainProxy)                              // member = entry, last
+                        val subChainTag = buildChain(
+                            "$tagOutbound-chain-${mainProxy.id}",
+                            subChainList,
+                            false,
+                            { null }
+                        )
+                        outbounds.findLast { it.tag == subChainTag }?.let { chainOutbounds.add(it) }
+                    }
+                }
+
                 // Check if we need to apply landing proxy for TYPE_GROUP balancer
                 val shouldUseLandingProxy = balancerBean.type == BalancerBean.TYPE_GROUP &&
                                             balancerBean.useLandingProxy == true
@@ -2213,11 +2262,11 @@ fun buildV2RayConfig(
 
         }
 
-        val mainIsBalancer = proxy.balancerBean != null
+        val mainIsBalancer = proxy.balancerBean != null || entryBalancer != null
 
         val tagProxy = buildChain(
             TAG_AGENT, proxies, mainIsBalancer
-        ) { proxy.balancerBean }
+        ) { entryBalancer?.balancerBean ?: proxy.balancerBean }
 
         val balancerMap = mutableMapOf<Long, String>()
         val tagMap = mutableMapOf<Long, String>()
