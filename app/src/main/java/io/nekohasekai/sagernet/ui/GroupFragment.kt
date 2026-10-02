@@ -96,7 +96,7 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                 viewHolder: RecyclerView.ViewHolder
             ): Int {
                 val proxyGroup = (viewHolder as GroupHolder).proxyGroup
-                if (proxyGroup.ungrouped || proxyGroup.id in GroupUpdater.updating) {
+                if (proxyGroup.ungrouped || GroupUpdater.isGroupUpdating(proxyGroup.id)) {
                     return 0
                 }
                 return super.getSwipeDirs(recyclerView, viewHolder)
@@ -106,7 +106,7 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                 recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder
             ): Int {
                 val proxyGroup = (viewHolder as GroupHolder).proxyGroup
-                if (proxyGroup.ungrouped || proxyGroup.id in GroupUpdater.updating) {
+                if (proxyGroup.ungrouped || GroupUpdater.isGroupUpdating(proxyGroup.id)) {
                     return 0
                 }
                 return super.getDragDirs(recyclerView, viewHolder)
@@ -144,15 +144,12 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                 startActivity(Intent(context, GroupSettingsActivity::class.java))
             }
             R.id.action_update_all_subscriptions -> {
-                val connected = SagerNet.started && DataStore.startedProfile > 0
                 MaterialAlertDialogBuilder(requireContext())
                     .setTitle(R.string.update_all_subscriptions)
                     .setPositiveButton(android.R.string.ok) { _, _ ->
                         SagerDatabase.groupDao.allGroups()
-                            .filter { it.type == GroupType.SUBSCRIPTION }
-                            .filter { if (connected) true else !it.subscription!!.updateWhenConnectedOnly }
                             .forEach {
-                                GroupUpdater.startUpdate(it, byUser = false) // Do not display changelog or error message
+                                GroupUpdater.startUpdateAll(it.id, byUser = false) // Do not display changelog or error message
                             }
                     }
                     .setNegativeButton(android.R.string.cancel, null)
@@ -445,6 +442,11 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                 R.id.action_export_backup_of_all_profiles_file -> {
                     startFilesForResult(exportBackupOfAllProfiles, "profiles_${proxyGroup.displayName()}_backup.txt")
                 }
+                R.id.action_subscription_sources -> {
+                    startActivity(Intent(requireContext(), SubscriptionSourcesActivity::class.java).apply {
+                        putExtra(SubscriptionSourcesActivity.EXTRA_GROUP_ID, proxyGroup.id)
+                    })
+                }
                 R.id.action_clear -> {
                     MaterialAlertDialogBuilder(requireContext()).setTitle(R.string.confirm)
                         .setMessage(R.string.clear_profiles_message)
@@ -478,7 +480,7 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
             }
 
             updateButton.setOnClickListener {
-                GroupUpdater.startUpdate(group, true)
+                GroupUpdater.startUpdateAll(group.id, true)
             }
 
             optionsButton.setOnClickListener {
@@ -500,21 +502,15 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                 popup.show()
             }
 
-            if (group.id in GroupUpdater.updating) {
+            if (GroupUpdater.isGroupUpdating(group.id)) {
                 (groupName.parent as LinearLayout).apply {
                     setPadding(paddingLeft, dp2px(11), paddingRight, paddingBottom)
                 }
 
                 subscriptionUpdateProgress.isVisible = true
-
-                if (!GroupUpdater.progress.containsKey(group.id)) {
-                    subscriptionUpdateProgress.isIndeterminate = true
-                } else {
-                    subscriptionUpdateProgress.isIndeterminate = false
-                    val progress = GroupUpdater.progress[group.id]!!
-                    subscriptionUpdateProgress.max = progress.max
-                    subscriptionUpdateProgress.progress = progress.progress
-                }
+                // Progress is tracked per-source; with possibly several sources
+                // refreshing at once, show an indeterminate group-level bar.
+                subscriptionUpdateProgress.isIndeterminate = true
 
                 updateButton.isInvisible = true
                 editButton.isGone = true
@@ -525,87 +521,81 @@ class GroupFragment : ToolbarFragment(R.layout.layout_group),
                 }
 
                 subscriptionUpdateProgress.isVisible = false
-                updateButton.isVisible = group.type == GroupType.SUBSCRIPTION
+                updateButton.isVisible = false  // decided below once source count is known
                 editButton.isGone = group.ungrouped
             }
 
-            if (group.type == GroupType.SUBSCRIPTION) {
-                val subscription = group.subscription!!
-                val text = mutableListOf<String>()
-                if (subscription.bytesUsed > 0L || subscription.bytesRemaining > 0L) {
-                    text.add(if (subscription.bytesRemaining > 0L) {
-                        getString(
-                            R.string.subscription_traffic, FormatFileSizeCompat.formatFileSize(
-                                context, subscription.bytesUsed, DataStore.useIECUnit
-                            ), FormatFileSizeCompat.formatFileSize(
-                                context, subscription.bytesRemaining, DataStore.useIECUnit
-                            )
-                        )
-                    } else {
-                        getString(
-                            R.string.subscription_used, FormatFileSizeCompat.formatFileSize(
-                                context, subscription.bytesUsed, DataStore.useIECUnit
-                            )
-                        )
-                    })
-                }
-                if (subscription.expiryDate > 0L) {
-                    text.add(getString(
-                        R.string.subscription_expire,
-                        DateUtils.getRelativeTimeSpanString(context, subscription.expiryDate * 1000)
-                            // hack for Chinese, "1月1日" -> "1 月 1 日","上午0:00" -> 上午 0:00"
-                            .replace("^([1-9]|1[0-2])月([1-9]|1[0-9]|2[0-9]|3[0-1])日+".toRegex(), "$1 月 $2 日")
-                            .replace("^上午(([1-9]|1[0-2]):([0-5][0-9]))+".toRegex(), "上午 $1")
-                            .replace("^下午(([1-9]|1[0-2]):([0-5][0-9]))+".toRegex(), "下午 $1")
-                    ))
-                }
-                if (text.isNotEmpty()) {
-                    groupTraffic.isVisible = true
-                    groupTraffic.text = text.joinToString("\n")
-                    groupStatus.setPadding(0)
-                    if (proxyGroup.id !in GroupUpdater.updating && subscription.bytesRemaining > 0L) {
-                        subscriptionUpdateProgress.apply {
-                            isVisible = true
-                            setProgressCompat(
-                                ((subscription.bytesUsed.toDouble() / (subscription.bytesUsed + subscription.bytesRemaining).toDouble()) * 100).toInt(),
-                                true
-                            )
-                        }
+            // Source-aware: a group is "updatable" when it owns >=1 subscription
+            // source, regardless of its legacy type. Aggregate traffic/expiry
+            // across all its sources.
+            runOnDefaultDispatcher {
+                val sources = SagerDatabase.sourceDao.byGroup(group.id)
+                val subs = sources.mapNotNull { it.subscription }
+                val bytesUsed = subs.sumOf { if (it.bytesUsed > 0L) it.bytesUsed else 0L }
+                val bytesRemaining = subs.sumOf { if (it.bytesRemaining > 0L) it.bytesRemaining else 0L }
+                val expiryDate = subs.mapNotNull { it.expiryDate.takeIf { d -> d > 0L } }.minOrNull() ?: 0L
+                val updating = GroupUpdater.isGroupUpdating(group.id)
+                onMainDispatcher {
+                    if (!updating) {
+                        updateButton.isVisible = sources.isNotEmpty()
                     }
-                } else {
-                    groupTraffic.isVisible = false
-                    groupStatus.setPadding(0, 0, 0, dp2px(4))
+                    val text = mutableListOf<String>()
+                    if (bytesUsed > 0L || bytesRemaining > 0L) {
+                        text.add(if (bytesRemaining > 0L) {
+                            getString(
+                                R.string.subscription_traffic,
+                                FormatFileSizeCompat.formatFileSize(context, bytesUsed, DataStore.useIECUnit),
+                                FormatFileSizeCompat.formatFileSize(context, bytesRemaining, DataStore.useIECUnit)
+                            )
+                        } else {
+                            getString(
+                                R.string.subscription_used,
+                                FormatFileSizeCompat.formatFileSize(context, bytesUsed, DataStore.useIECUnit)
+                            )
+                        })
+                    }
+                    if (expiryDate > 0L) {
+                        text.add(getString(
+                            R.string.subscription_expire,
+                            DateUtils.getRelativeTimeSpanString(context, expiryDate * 1000)
+                                .replace("^([1-9]|1[0-2])月([1-9]|1[0-9]|2[0-9]|3[0-1])日+".toRegex(), "$1 月 $2 日")
+                                .replace("^上午(([1-9]|1[0-2]):([0-5][0-9]))+".toRegex(), "上午 $1")
+                                .replace("^下午(([1-9]|1[0-2]):([0-5][0-9]))+".toRegex(), "下午 $1")
+                        ))
+                    }
+                    if (text.isNotEmpty()) {
+                        groupTraffic.isVisible = true
+                        groupTraffic.text = text.joinToString("\n")
+                        groupStatus.setPadding(0)
+                    } else {
+                        groupTraffic.isVisible = false
+                        groupStatus.setPadding(0, 0, 0, dp2px(4))
+                    }
                 }
-            } else {
-                groupTraffic.isVisible = false
-                groupStatus.setPadding(0, 0, 0, dp2px(4))
             }
 
             runOnDefaultDispatcher {
                 val size = SagerDatabase.proxyDao.countByGroup(group.id)
+                val sourceCount = SagerDatabase.sourceDao.countByGroup(group.id)
+                val lastUpdated = SagerDatabase.sourceDao.byGroup(group.id)
+                    .mapNotNull { it.subscription?.lastUpdated?.takeIf { d -> d > 0L } }
+                    .maxOrNull() ?: 0L
                 onMainDispatcher {
                     try {
-                        when (group.type) {
-                            GroupType.BASIC -> {
-                                if (size == 0L) {
-                                    groupStatus.setText(R.string.group_status_empty)
-                                } else {
-                                    groupStatus.text = (requireActivity() as MainActivity).resources.getQuantityString(R.plurals.group_status_proxies, size.toInt(), size)
-                                }
-                            }
-                            GroupType.SUBSCRIPTION -> {
-                                groupStatus.text = when {
-                                    size == 0L -> getString(R.string.group_status_empty_subscription)
-                                    group.subscription!!.lastUpdated <= 0L -> context!!.resources.getQuantityString(R.plurals.group_status_proxies, size.toInt(), size)
-                                    else -> (requireActivity() as MainActivity).resources.getQuantityString(R.plurals.group_status_proxies_subscription, size.toInt(), size,
-                                        DateUtils.getRelativeTimeSpanString(context, group.subscription!!.lastUpdated * 1000)
-                                            // hack for Chinese, "1月1日" -> "1 月 1 日","上午0:00" -> 上午 0:00"
-                                            .replace("^([1-9]|1[0-2])月([1-9]|1[0-9]|2[0-9]|3[0-1])日+".toRegex(), "$1 月 $2 日")
-                                            .replace("^上午(([1-9]|1[0-2]):([0-5][0-9]))+".toRegex(), "上午 $1")
-                                            .replace("^下午(([1-9]|1[0-2]):([0-5][0-9]))+".toRegex(), "下午 $1")
-                                    )
-                                }
-                            }
+                        groupStatus.text = when {
+                            sourceCount == 0L && size == 0L -> getString(R.string.group_status_empty)
+                            sourceCount == 0L -> (requireActivity() as MainActivity).resources
+                                .getQuantityString(R.plurals.group_status_proxies, size.toInt(), size)
+                            size == 0L -> getString(R.string.group_status_empty_subscription)
+                            lastUpdated <= 0L -> context!!.resources
+                                .getQuantityString(R.plurals.group_status_proxies, size.toInt(), size)
+                            else -> (requireActivity() as MainActivity).resources.getQuantityString(
+                                R.plurals.group_status_proxies_subscription, size.toInt(), size,
+                                DateUtils.getRelativeTimeSpanString(context, lastUpdated * 1000)
+                                    .replace("^([1-9]|1[0-2])月([1-9]|1[0-9]|2[0-9]|3[0-1])日+".toRegex(), "$1 月 $2 日")
+                                    .replace("^上午(([1-9]|1[0-2]):([0-5][0-9]))+".toRegex(), "上午 $1")
+                                    .replace("^下午(([1-9]|1[0-2]):([0-5][0-9]))+".toRegex(), "下午 $1")
+                            )
                         }
                     } catch (e: IllegalStateException) {
                         Logs.e(e.readableMessage)

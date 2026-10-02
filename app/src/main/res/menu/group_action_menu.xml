@@ -38,6 +38,9 @@
         </menu>
     </item>
     <item
+        android:id="@+id/action_subscription_sources"
+        android:title="@string/subscription_sources" />
+    <item
         android:id="@+id/action_clear"
         android:title="@string/clear_profiles" />
 </menu>

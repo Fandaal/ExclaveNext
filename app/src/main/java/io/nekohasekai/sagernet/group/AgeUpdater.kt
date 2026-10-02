@@ -29,6 +29,8 @@ import io.nekohasekai.sagernet.database.ProxyEntity
 import io.nekohasekai.sagernet.database.ProxyGroup
 import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.database.SubscriptionBean
+import io.nekohasekai.sagernet.database.SubscriptionSource
+import io.nekohasekai.sagernet.bg.GeoIpAnnotator
 import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.ktx.*
 import libexclavecore.Libexclavecore
@@ -44,11 +46,12 @@ object AgeUpdater : GroupUpdater() {
 
     override suspend fun doUpdate(
         proxyGroup: ProxyGroup,
-        subscription: SubscriptionBean,
+        source: SubscriptionSource,
         userInterface: GroupManager.Interface?,
         byUser: Boolean
     ) {
 
+        val subscription = source.subscription!!
         val link = subscription.link
         var proxies: List<AbstractBean>
         if (link.startsWith("content://", ignoreCase = true)) {
@@ -144,7 +147,7 @@ object AgeUpdater : GroupUpdater() {
         }
         proxies = proxiesMap.values.toList()
 
-        val exists = SagerDatabase.proxyDao.getByGroup(proxyGroup.id)
+        val exists = SagerDatabase.proxyDao.getByGroupAndSource(proxyGroup.id, source.id)
         val duplicate = ArrayList<String>()
         if (subscription.deduplication) {
             val uniqueProxies = LinkedHashSet<Protocols.Deduplication>()
@@ -169,14 +172,36 @@ object AgeUpdater : GroupUpdater() {
             proxies = uniqueProxies.toList().map { it.bean }
         }
 
-        val nameMap = proxies.associateBy { bean ->
-            bean.displayName()
+        // Reconcile by stable address+port+type key, per source (see RawUpdater).
+        fun beanKey(bean: AbstractBean): String =
+            "${bean.serverAddress}\u0000${bean.serverPort}\u0000${ProxyEntity().putBean(bean).type}"
+
+        val nameMap = LinkedHashMap<String, AbstractBean>()
+        for (bean in proxies) {
+            var key = beanKey(bean)
+            var i = 0
+            while (nameMap.containsKey(key)) {
+                i++
+                key = beanKey(bean) + "#dup$i"
+            }
+            nameMap[key] = bean
+        }
+
+        val existsByKey = LinkedHashMap<String, ProxyEntity>()
+        for (entity in exists) {
+            var key = entity.matchKey()
+            var i = 0
+            while (existsByKey.containsKey(key)) {
+                i++
+                key = entity.matchKey() + "#dup$i"
+            }
+            existsByKey[key] = entity
         }
 
         val toDelete = ArrayList<ProxyEntity>()
         val toReplace = exists.mapNotNull { entity ->
-            val name = entity.displayName()
-            if (nameMap.contains(name)) name to entity else let {
+            val key = existsByKey.entries.firstOrNull { it.value === entity }?.key
+            if (key != null && nameMap.contains(key)) key to entity else let {
                 toDelete.add(entity)
                 null
             }
@@ -189,17 +214,19 @@ object AgeUpdater : GroupUpdater() {
 
         var userOrder = 1L
         var changed = toDelete.size
-        for ((name, bean) in nameMap.entries) {
-            if (toReplace.contains(name)) {
-                val entity = toReplace[name]!!
+        for ((key, bean) in nameMap.entries) {
+            if (toReplace.contains(key)) {
+                val entity = toReplace[key]!!
+                val oldName = entity.displayName()
                 val existsBean = entity.requireBean()
                 existsBean.applyFeatureSettings(bean)
+                bean.name = GeoIpAnnotator.transferAnnotations(oldName, bean.displayName())
                 when {
                     existsBean != bean -> {
                         changed++
                         entity.putBean(bean)
                         toUpdate.add(entity)
-                        updated[entity.displayName()] = name
+                        updated[entity.displayName()] = oldName
                     }
                     entity.userOrder != userOrder -> {
                         entity.putBean(bean)
@@ -210,11 +237,11 @@ object AgeUpdater : GroupUpdater() {
             } else {
                 changed++
                 SagerDatabase.proxyDao.addProxy(ProxyEntity(
-                    groupId = proxyGroup.id, userOrder = userOrder
+                    groupId = proxyGroup.id, sourceId = source.id, userOrder = userOrder
                 ).apply {
                     putBean(bean)
                 })
-                added.add(name)
+                added.add(bean.displayName())
             }
             userOrder++
         }
@@ -223,8 +250,7 @@ object AgeUpdater : GroupUpdater() {
         SagerDatabase.proxyDao.deleteProxy(toDelete)
 
         subscription.lastUpdated = System.currentTimeMillis() / 1000
-        SagerDatabase.groupDao.updateGroup(proxyGroup)
-        finishUpdate(proxyGroup)
+        finishUpdate(source)
 
         if (byUser && userInterface != null) {
             userInterface.onUpdateSuccess(proxyGroup, changed, added, updated, deleted, duplicate)

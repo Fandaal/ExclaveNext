@@ -350,6 +350,48 @@ class ConfigurationFragment @JvmOverloads constructor(
         return RawUpdater.parseRaw(response.contentString)
     }
 
+    // A subscription URL was pasted/opened: ask whether to add it as an
+    // updatable subscription source of the current group, or import its
+    // configs once as manual profiles (sourceId == 0). Must be called from a
+    // background dispatcher; the dialog itself is shown on the main thread.
+    private suspend fun offerSubscriptionOrImport(url: String) {
+        onMainDispatcher {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.subscription_source_add)
+                .setMessage(getString(R.string.subscription_import_prompt, url))
+                .setPositiveButton(R.string.subscription_import_as_source) { _, _ ->
+                    runOnDefaultDispatcher {
+                        val groupId = DataStore.currentGroupId()
+                        val source = SubscriptionSource(groupId = groupId).apply {
+                            subscription = SubscriptionBean().applyDefaultValues().apply { link = url }
+                        }
+                        val created = GroupManager.createSource(source)
+                        GroupUpdater.startUpdate(created, true)
+                        onMainDispatcher {
+                            snackbar(getString(R.string.subscription_source_added)).show()
+                        }
+                    }
+                }
+                .setNegativeButton(R.string.subscription_import_once) { _, _ ->
+                    runOnDefaultDispatcher {
+                        val fetched = try {
+                            fetchSubscriptionProxies(url)
+                        } catch (e: Exception) {
+                            Logs.w(e)
+                            null
+                        }
+                        if (!fetched.isNullOrEmpty()) {
+                            import(fetched)
+                        } else onMainDispatcher {
+                            snackbar(getString(R.string.no_proxies_found_in_subscription)).show()
+                        }
+                    }
+                }
+                .setNeutralButton(android.R.string.cancel, null)
+                .show()
+        }
+    }
+
     val importFile = registerForActivityResult(ActivityResultContracts.GetContent()) { file ->
         var fileText = ""
         if (file != null) runOnDefaultDispatcher {
@@ -384,17 +426,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
                 if (proxies.isEmpty()) {
                     if (!fileText.contains("\n") && !fileText.contains("\r") && isHTTPorHTTPSURL(fileText)) {
-                        val fetched = try {
-                            fetchSubscriptionProxies(fileText)
-                        } catch (e: Exception) {
-                            Logs.w(e)
-                            null
-                        }
-                        if (!fetched.isNullOrEmpty()) {
-                            import(fetched)
-                        } else onMainDispatcher {
-                            snackbar(getString(R.string.no_proxies_found_in_subscription)).show()
-                        }
+                        offerSubscriptionOrImport(fileText.trim())
                     } else {
                         onMainDispatcher {
                             snackbar(getString(R.string.no_proxies_found_in_file)).show()
@@ -495,20 +527,9 @@ class ConfigurationFragment @JvmOverloads constructor(
                             val proxies = RawUpdater.parseRaw(text)
                             if (proxies.isNullOrEmpty()) {
                                 if (!text.contains("\n") && !text.contains("\r") && isHTTPorHTTPSURL(text)) {
-                                    // Subscription URL in clipboard: download it and import the
-                                    // configs into the CURRENTLY selected group, instead of
-                                    // creating a brand-new subscription group.
-                                    val fetched = try {
-                                        fetchSubscriptionProxies(text)
-                                    } catch (e: Exception) {
-                                        Logs.w(e)
-                                        null
-                                    }
-                                    if (!fetched.isNullOrEmpty()) {
-                                        import(fetched)
-                                    } else onMainDispatcher {
-                                        snackbar(getString(R.string.no_proxies_found_in_subscription)).show()
-                                    }
+                                    // Subscription URL in clipboard: offer to add it as an
+                                    // updatable source of the current group, or import once.
+                                    offerSubscriptionOrImport(text.trim())
                                 } else onMainDispatcher {
                                     snackbar(getString(R.string.no_proxies_found_in_clipboard)).show()
                                 }
@@ -770,10 +791,8 @@ class ConfigurationFragment @JvmOverloads constructor(
             R.id.action_update_subscription -> {
                 runOnDefaultDispatcher {
                     val currentGroup = DataStore.currentGroup()
-                    if (currentGroup.type == GroupType.SUBSCRIPTION) {
-                        if (currentGroup.id !in GroupUpdater.updating) {
-                            GroupUpdater.startUpdate(currentGroup, true)
-                        }
+                    if (SagerDatabase.sourceDao.countByGroup(currentGroup.id) > 0L) {
+                        GroupUpdater.startUpdateAll(currentGroup.id, true)
                     } else {
                         snackbar(R.string.group_not_a_subscription).show()
                     }

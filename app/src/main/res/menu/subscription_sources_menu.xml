@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_add_source"
+        android:icon="@drawable/ic_action_note_add"
+        android:title="@string/subscription_source_add"
+        app:showAsAction="always">
+        <menu>
+            <item
+                android:id="@+id/action_add_source_manual"
+                android:title="@string/subscription_source_add_manual" />
+            <item
+                android:id="@+id/action_add_source_clipboard"
+                android:title="@string/subscription_source_add_clipboard" />
+        </menu>
+    </item>
+    <item
+        android:id="@+id/action_update_all_sources"
+        android:icon="@drawable/ic_baseline_update_24"
+        android:title="@string/update_all_subscriptions"
+        app:showAsAction="always"
+        tools:ignore="AlwaysShowAction"
+        xmlns:tools="http://schemas.android.com/tools" />
+</menu>

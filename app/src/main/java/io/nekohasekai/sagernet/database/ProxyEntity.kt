@@ -87,6 +87,7 @@ data class ProxyEntity(
     var ping: Int = 0,
     var uuid: String = "",
     var error: String? = null,
+    @ColumnInfo(defaultValue = "0") var sourceId: Long = 0L,
     var socksBean: SOCKSBean? = null,
     var httpBean: HttpBean? = null,
     var ssBean: ShadowsocksBean? = null,
@@ -164,7 +165,7 @@ data class ProxyEntity(
     }
 
     override fun serializeToBuffer(output: ByteBufferOutput) {
-        output.writeInt(0)
+        output.writeInt(1)
 
         output.writeLong(id)
         output.writeLong(groupId)
@@ -176,6 +177,7 @@ data class ProxyEntity(
         output.writeInt(ping)
         output.writeString(uuid)
         output.writeString(error)
+        output.writeLong(sourceId)
 
         val data = KryoConverters.serialize(requireBean())
         output.writeVarInt(data.size, true)
@@ -197,6 +199,9 @@ data class ProxyEntity(
         ping = input.readInt()
         uuid = input.readString()
         error = input.readString()
+        if (version >= 1) {
+            sourceId = input.readLong()
+        }
         putByteArray(input.readBytes(input.readVarInt(true)))
 
         dirty = input.readBoolean()
@@ -260,6 +265,15 @@ data class ProxyEntity(
 
     fun displayName() = requireBean().displayName()
     fun displayAddress() = requireBean().displayAddress()
+
+    /**
+     * Stable reconciliation key for subscription updates: address + port + protocol
+     * type. Independent of the display name, so geo/speed annotations written into
+     * bean.name survive a subscription refresh instead of looking like a new profile.
+     */
+    fun matchKey(): String = requireBean().let {
+        "${it.serverAddress}\u0000${it.serverPort}\u0000$type"
+    }
 
     fun requireBean(): AbstractBean {
         return when (type) {
@@ -530,6 +544,12 @@ data class ProxyEntity(
 
         @Query("SELECT * FROM proxy_entities WHERE groupId = :groupId ORDER BY userOrder")
         fun getByGroup(groupId: Long): List<ProxyEntity>
+
+        @Query("SELECT * FROM proxy_entities WHERE groupId = :groupId AND sourceId = :sourceId ORDER BY userOrder")
+        fun getByGroupAndSource(groupId: Long, sourceId: Long): List<ProxyEntity>
+
+        @Query("DELETE FROM proxy_entities WHERE sourceId = :sourceId")
+        fun deleteBySource(sourceId: Long)
 
         @Query("SELECT * FROM proxy_entities WHERE id in (:proxyIds)")
         fun getEntities(proxyIds: List<Long>): List<ProxyEntity>

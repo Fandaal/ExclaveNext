@@ -124,10 +124,9 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     }
 
     fun selectedGroupForImport(): Long {
-        val current = currentGroup()
-        if (current.type == GroupType.BASIC) return current.id
-        val groups = SagerDatabase.groupDao.allGroups()
-        return groups.find { it.type == GroupType.BASIC }!!.id
+        // Multi-source: any group can now hold manual profiles (sourceId == 0)
+        // alongside subscription sources, so import straight into the current one.
+        return currentGroup().id
     }
 
     var appTheme by configurationStore.int(Key.APP_THEME)
@@ -474,6 +473,10 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var subscriptionHTTPHeaders by profileCacheStore.string(Key.SUBSCRIPTION_HTTP_HEADERS)
     var subscriptionAgePrivateKey by profileCacheStore.string(Key.SUBSCRIPTION_AGE_PRIVATE_KEY)
 
+    var subscriptionSourceName by profileCacheStore.string(Key.SUBSCRIPTION_SOURCE_NAME)
+    var editingSourceId by profileCacheStore.long(Key.EDITING_SOURCE_ID)
+    var editingSourceGroupId by profileCacheStore.long(Key.EDITING_SOURCE_GROUP_ID)
+
     var editingAssetName by profileCacheStore.string(Key.EDITING_ASSET_NAME)
     var assetName by profileCacheStore.string(Key.ASSET_NAME)
     var assetUrl by profileCacheStore.string(Key.ASSET_URL)
@@ -488,6 +491,8 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var getInstalledPackagesInited by configurationStore.boolean(Key.GET_INSTALLED_PACKAGES_INITED)
     var postNotificationsPermissionRequested by configurationStore.boolean(Key.POST_NOTIFICATION_PERMISSION_REQUESTED)
     var accessLocalNetworkPermissionRequested by configurationStore.boolean(Key.ACCESS_LOCAL_NETWORK_PERMISSION_REQUESTED)
+
+    var subscriptionSourcesMigrated by configurationStore.boolean(Key.SUBSCRIPTION_SOURCES_MIGRATED)
 
     var experimentalFlagsProperties = Properties().apply {
         load(BufferedReader(StringReader(experimentalFlags)))

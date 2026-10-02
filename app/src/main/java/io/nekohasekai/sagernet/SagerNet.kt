@@ -49,6 +49,7 @@ import io.nekohasekai.sagernet.bg.SagerConnection
 import io.nekohasekai.sagernet.bg.SubscriptionUpdater
 import io.nekohasekai.sagernet.bg.test.DebugInstance
 import io.nekohasekai.sagernet.database.DataStore
+import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.SagerDatabase
 import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.ktx.readableMessage
@@ -109,6 +110,12 @@ class SagerNet : Application(),
         }
 
         val isMainProcess = processName == BuildConfig.APPLICATION_ID
+
+        if (isMainProcess) runOnDefaultDispatcher {
+            runCatching {
+                GroupManager.migrateSubscriptionSources()
+            }
+        }
 
         if (!isMainProcess) {
             Libexclavecore.setUidDumper(this, Build.VERSION.SDK_INT < Build.VERSION_CODES.Q)

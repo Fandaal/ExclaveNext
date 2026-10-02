@@ -21,6 +21,7 @@ package io.nekohasekai.sagernet.database
 
 import io.nekohasekai.sagernet.GroupType
 import io.nekohasekai.sagernet.bg.SubscriptionUpdater
+import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.ktx.applyDefaultValues
 
 object GroupManager {
@@ -129,9 +130,77 @@ object GroupManager {
     suspend fun deleteGroup(group: List<ProxyGroup>) {
         SagerDatabase.groupDao.deleteGroup(group)
         SagerDatabase.proxyDao.deleteByGroup(group.map { it.id }.toLongArray())
+        SagerDatabase.sourceDao.deleteByGroup(group.map { it.id }.toLongArray())
         for (proxyGroup in group) iterator { groupRemoved(proxyGroup.id) }
         if (group.any { it.type == GroupType.SUBSCRIPTION && it.subscription!!.autoUpdate }) {
             SubscriptionUpdater.reconfigureUpdater()
+        }
+    }
+
+    // ---- Multi-source support -------------------------------------------------
+
+    /** Create a new subscription source inside a group and return its id. */
+    suspend fun createSource(source: SubscriptionSource): SubscriptionSource {
+        source.userOrder = SagerDatabase.sourceDao.nextOrder(source.groupId) ?: 1
+        source.id = SagerDatabase.sourceDao.create(source.applyDefaultValues())
+        iterator { groupUpdated(source.groupId) }
+        if (source.subscription?.autoUpdate == true) {
+            SubscriptionUpdater.reconfigureUpdater()
+        }
+        return source
+    }
+
+    suspend fun updateSource(source: SubscriptionSource) {
+        SagerDatabase.sourceDao.update(source)
+        iterator { groupUpdated(source.groupId) }
+        if (source.subscription?.autoUpdate == true) {
+            SubscriptionUpdater.reconfigureUpdater()
+        }
+    }
+
+    /** Delete a source and all profiles that belong to it. */
+    suspend fun deleteSource(sourceId: Long) {
+        val source = SagerDatabase.sourceDao.getById(sourceId) ?: return
+        SagerDatabase.proxyDao.deleteBySource(sourceId)
+        SagerDatabase.sourceDao.deleteById(sourceId)
+        iterator { groupUpdated(source.groupId) }
+        SubscriptionUpdater.reconfigureUpdater()
+    }
+
+    /**
+     * One-time backfill: convert each legacy single-subscription group into a
+     * group that owns one SubscriptionSource, and tag its profiles with the new
+     * source id. Idempotent and safe to call on every start — guarded by a flag
+     * in DataStore. BASIC groups and their profiles stay sourceId == 0 (manual).
+     */
+    suspend fun migrateSubscriptionSources() {
+        if (DataStore.subscriptionSourcesMigrated) return
+        try {
+            for (group in SagerDatabase.groupDao.allGroups()) {
+                if (group.type != GroupType.SUBSCRIPTION) continue
+                val sub = group.subscription ?: continue
+                if (sub.link.isNullOrEmpty()) continue
+                if (SagerDatabase.sourceDao.countByGroup(group.id) > 0L) continue
+
+                val source = SubscriptionSource(
+                    groupId = group.id,
+                    name = group.displayName(),
+                    subscription = sub,
+                )
+                source.userOrder = SagerDatabase.sourceDao.nextOrder(group.id) ?: 1
+                source.id = SagerDatabase.sourceDao.create(source.applyDefaultValues())
+
+                val profiles = SagerDatabase.proxyDao.getByGroup(group.id)
+                for (profile in profiles) {
+                    profile.sourceId = source.id
+                }
+                if (profiles.isNotEmpty()) {
+                    SagerDatabase.proxyDao.updateProxy(profiles)
+                }
+            }
+            DataStore.subscriptionSourcesMigrated = true
+        } catch (e: Exception) {
+            Logs.w(e)
         }
     }
 

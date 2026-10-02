@@ -78,26 +78,6 @@ class GroupSettingsActivity(
         DataStore.groupName = name ?: ""
         DataStore.groupType = type
         DataStore.groupOrder = order
-        val sub = if (type == GroupType.SUBSCRIPTION) {
-            subscription ?: SubscriptionBean().applyDefaultValues()
-        } else {
-            SubscriptionBean().applyDefaultValues()
-        }
-        DataStore.subscriptionType = sub.type
-        DataStore.subscriptionLink = sub.link
-        DataStore.subscriptionDeduplication = sub.deduplication
-        DataStore.subscriptionUpdateWhenConnectedOnly = sub.updateWhenConnectedOnly
-        DataStore.subscriptionUserAgent = sub.customUserAgent
-        DataStore.subscriptionAutoUpdate = sub.autoUpdate
-        DataStore.subscriptionAutoUpdateDelay = sub.autoUpdateDelay
-        DataStore.subscriptionLastUpdated = sub.lastUpdated
-        DataStore.subscriptionBytesUsed = sub.bytesUsed
-        DataStore.subscriptionBytesRemaining = sub.bytesRemaining
-        DataStore.subscriptionExpiryDate = sub.expiryDate
-        DataStore.subscriptionNameFilter = sub.nameFilter
-        DataStore.subscriptionNameFilter1 = sub.nameFilter1
-        DataStore.subscriptionHTTPHeaders = sub.httpHeaders
-        DataStore.subscriptionAgePrivateKey = sub.agePrivateKey
         DataStore.frontProxyOutbound = frontProxy
         DataStore.landingProxyOutbound = landingProxy
         DataStore.frontProxy = if (frontProxy >= 0) 1 else 0
@@ -105,38 +85,15 @@ class GroupSettingsActivity(
     }
 
     fun ProxyGroup.serialize() {
-        type = DataStore.groupType
-        name = DataStore.groupName.takeIf { it.isNotEmpty() } ?:
-                if (type == GroupType.SUBSCRIPTION) {
-                    getString(R.string.subscription)
-                } else {
-                    getString(R.string.menu_group)
-                }
+        // Groups are now plain containers; subscription data lives in
+        // SubscriptionSource rows. Normalise the legacy type/column accordingly.
+        type = GroupType.BASIC
+        name = DataStore.groupName.takeIf { it.isNotEmpty() } ?: getString(R.string.menu_group)
         order = DataStore.groupOrder
 
         frontProxy = if (DataStore.frontProxy == 1) DataStore.frontProxyOutbound else -1
         landingProxy = if (DataStore.landingProxy == 1) DataStore.landingProxyOutbound else -1
-        if (type == GroupType.SUBSCRIPTION) {
-            subscription = SubscriptionBean().applyDefaultValues().apply {
-                type = DataStore.subscriptionType
-                link = DataStore.subscriptionLink
-                deduplication = DataStore.subscriptionDeduplication
-                updateWhenConnectedOnly = DataStore.subscriptionUpdateWhenConnectedOnly
-                customUserAgent = DataStore.subscriptionUserAgent
-                autoUpdate = DataStore.subscriptionAutoUpdate
-                autoUpdateDelay = DataStore.subscriptionAutoUpdateDelay
-                lastUpdated = DataStore.subscriptionLastUpdated
-                bytesUsed = DataStore.subscriptionBytesUsed
-                bytesRemaining = DataStore.subscriptionBytesRemaining
-                expiryDate = DataStore.subscriptionExpiryDate
-                nameFilter = DataStore.subscriptionNameFilter
-                nameFilter1 = DataStore.subscriptionNameFilter1
-                httpHeaders = DataStore.subscriptionHTTPHeaders
-                agePrivateKey = DataStore.subscriptionAgePrivateKey
-            }
-        } else {
-            subscription = SubscriptionBean().applyDefaultValues()
-        }
+        subscription = null
     }
 
     fun needSave(): Boolean {
@@ -194,48 +151,19 @@ class GroupSettingsActivity(
             }
         }
 
-        val groupType = findPreference<ListPreference>(Key.GROUP_TYPE)!!
-        val groupSubscription = findPreference<PreferenceCategory>(Key.GROUP_SUBSCRIPTION)!!
-        val subscriptionUpdate = findPreference<PreferenceCategory>(Key.SUBSCRIPTION_UPDATE)!!
-        val subscriptionType = findPreference<ListPreference>(Key.SUBSCRIPTION_TYPE)!!
-        val httpHeaders = findPreference<EditTextPreference>(Key.SUBSCRIPTION_HTTP_HEADERS)!!.apply {
-            dialogMessage = getString(R.string.format, "\nKey1: Value1\nKey2: Value2")
+        // Groups are plain containers now; subscription configuration lives in
+        // the dedicated SubscriptionSources screen, opened from here.
+        val subscriptionSources = findPreference<Preference>(Key.GROUP_SUBSCRIPTION_SOURCES)!!
+        subscriptionSources.isEnabled = DataStore.editingId != 0L
+        if (DataStore.editingId == 0L) {
+            subscriptionSources.setSummary(R.string.subscription_sources_save_first)
         }
-        val agePrivateKey = findPreference<EditTextPreference>(Key.SUBSCRIPTION_AGE_PRIVATE_KEY)!!.apply {
-            summaryProvider = PasswordSummaryProvider
-        }
-
-        fun updateGroupType(groupType: Int = DataStore.groupType) {
-            val isSubscription = groupType == GroupType.SUBSCRIPTION
-            groupSubscription.isVisible = isSubscription
-            subscriptionUpdate.isVisible = isSubscription
-            httpHeaders.isVisible = isSubscription
-            agePrivateKey.isVisible = isSubscription && (subscriptionType.value as String).toInt() == SubscriptionType.AGE
-        }
-        updateGroupType()
-        groupType.setOnPreferenceChangeListener { _, newValue ->
-            updateGroupType((newValue as String).toInt())
-            true
-        }
-
-        fun updateSubscriptionType(subscriptionType: Int = DataStore.subscriptionType) {
-            agePrivateKey.isVisible = subscriptionType == SubscriptionType.AGE
-        }
-        updateSubscriptionType()
-        subscriptionType.setOnPreferenceChangeListener { _, newValue ->
-            updateSubscriptionType((newValue as String).toInt())
-            true
-        }
-
-        val subscriptionAutoUpdate = findPreference<SwitchPreference>(Key.SUBSCRIPTION_AUTO_UPDATE)!!
-        val subscriptionAutoUpdateDelay = findPreference<EditTextPreference>(Key.SUBSCRIPTION_AUTO_UPDATE_DELAY)!!
-        subscriptionAutoUpdateDelay.isEnabled = subscriptionAutoUpdate.isChecked
-        subscriptionAutoUpdateDelay.setOnPreferenceChangeListener { _, newValue ->
-            newValue as String
-            newValue.toIntOrNull() != null && newValue.toInt() >= 15
-        }
-        subscriptionAutoUpdate.setOnPreferenceChangeListener { _, newValue ->
-            subscriptionAutoUpdateDelay.isEnabled = (newValue as Boolean)
+        subscriptionSources.setOnPreferenceClickListener {
+            if (DataStore.editingId != 0L) {
+                startActivity(Intent(this@GroupSettingsActivity, SubscriptionSourcesActivity::class.java).apply {
+                    putExtra(SubscriptionSourcesActivity.EXTRA_GROUP_ID, DataStore.editingId)
+                })
+            }
             true
         }
     }

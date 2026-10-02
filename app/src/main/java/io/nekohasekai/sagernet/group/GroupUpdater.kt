@@ -25,7 +25,8 @@ import io.nekohasekai.sagernet.SubscriptionType
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProxyGroup
-import io.nekohasekai.sagernet.database.SubscriptionBean
+import io.nekohasekai.sagernet.database.SagerDatabase
+import io.nekohasekai.sagernet.database.SubscriptionSource
 import io.nekohasekai.sagernet.ktx.*
 import kotlinx.coroutines.*
 import java.util.*
@@ -34,9 +35,14 @@ import java.util.concurrent.atomic.AtomicInteger
 @Suppress("EXPERIMENTAL_API_USAGE")
 abstract class GroupUpdater {
 
+    /**
+     * Pull [source] and reconcile its profiles inside [proxyGroup]. Only
+     * profiles whose sourceId == source.id are touched; other sources and
+     * manually-added profiles (sourceId == 0) are left untouched.
+     */
     abstract suspend fun doUpdate(
         proxyGroup: ProxyGroup,
-        subscription: SubscriptionBean,
+        source: SubscriptionSource,
         userInterface: GroupManager.Interface?,
         byUser: Boolean
     )
@@ -49,31 +55,59 @@ abstract class GroupUpdater {
 
     companion object {
 
+        // Keyed by SubscriptionSource.id (a single source refresh).
         val updating = Collections.synchronizedSet<Long>(mutableSetOf())
         val progress = Collections.synchronizedMap<Long, Progress>(mutableMapOf())
 
-        fun startUpdate(proxyGroup: ProxyGroup, byUser: Boolean) {
-            runOnDefaultDispatcher {
-                executeUpdate(proxyGroup, byUser)
+        /** True while any source of [groupId] is being refreshed. */
+        fun isGroupUpdating(groupId: Long): Boolean {
+            val sourceIds = SagerDatabase.sourceDao.byGroup(groupId).map { it.id }
+            synchronized(updating) {
+                return sourceIds.any { it in updating }
             }
         }
 
-        suspend fun executeUpdate(proxyGroup: ProxyGroup, byUser: Boolean): Boolean {
-            return coroutineScope {
-                if (!updating.add(proxyGroup.id)) cancel()
-                GroupManager.postReload(proxyGroup.id)
+        /** Refresh a single subscription source. */
+        fun startUpdate(source: SubscriptionSource, byUser: Boolean) {
+            runOnDefaultDispatcher {
+                executeUpdate(source, byUser)
+            }
+        }
 
-                val subscription = proxyGroup.subscription!!
+        /** Refresh every source of a group, sequentially. */
+        fun startUpdateAll(groupId: Long, byUser: Boolean) {
+            runOnDefaultDispatcher {
+                val connected = SagerNet.started && DataStore.startedProfile > 0
+                for (source in SagerDatabase.sourceDao.byGroup(groupId)) {
+                    val sub = source.subscription ?: continue
+                    if (!byUser && sub.updateWhenConnectedOnly && !connected) continue
+                    executeUpdate(source, byUser)
+                }
+            }
+        }
+
+        suspend fun executeUpdate(source: SubscriptionSource, byUser: Boolean): Boolean {
+            return coroutineScope {
+                if (!updating.add(source.id)) cancel()
+                GroupManager.postReload(source.groupId)
+
+                val proxyGroup = SagerDatabase.groupDao.getById(source.groupId)
+                if (proxyGroup == null) {
+                    finishUpdate(source)
+                    cancel()
+                    return@coroutineScope false
+                }
+                val subscription = source.subscription!!
                 val connected = SagerNet.started && DataStore.startedProfile > 0
                 val userInterface = GroupManager.userInterface
 
                 if (subscription.updateWhenConnectedOnly && !connected) {
                     if (!byUser || userInterface == null) {
-                        finishUpdate(proxyGroup)
+                        finishUpdate(source)
                         cancel()
                     } else {
                         if (!userInterface.confirm(app.getString(R.string.update_subscription_warning))) {
-                            finishUpdate(proxyGroup)
+                            finishUpdate(source)
                             cancel()
                         }
                     }
@@ -85,24 +119,26 @@ abstract class GroupUpdater {
                         SubscriptionType.SIP008 -> SIP008Updater
                         SubscriptionType.AGE -> AgeUpdater
                         else -> error("unsupported")
-                    }.doUpdate(proxyGroup, subscription, userInterface, byUser)
+                    }.doUpdate(proxyGroup, source, userInterface, byUser)
                     true
                 } catch (e: Throwable) {
                     Logs.w(e)
                     if (byUser && userInterface != null) {
                         userInterface.onUpdateFailure(proxyGroup, e.readableMessage)
                     }
-                    finishUpdate(proxyGroup)
+                    finishUpdate(source)
                     false
                 }
             }
         }
 
 
-        suspend fun finishUpdate(proxyGroup: ProxyGroup) {
-            updating.remove(proxyGroup.id)
-            progress.remove(proxyGroup.id)
-            GroupManager.postUpdate(proxyGroup)
+        suspend fun finishUpdate(source: SubscriptionSource) {
+            updating.remove(source.id)
+            progress.remove(source.id)
+            // Persist the refreshed subscription metadata (lastUpdated, bytes…).
+            SagerDatabase.sourceDao.update(source)
+            GroupManager.postUpdate(source.groupId)
         }
 
     }

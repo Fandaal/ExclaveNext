@@ -316,6 +316,7 @@ object Key {
     const val GROUP_LANDING_PROXY = "groupLandingProxy"
 
     const val GROUP_SUBSCRIPTION = "groupSubscription"
+    const val GROUP_SUBSCRIPTION_SOURCES = "groupSubscriptionSources"
     const val SUBSCRIPTION_TYPE = "subscriptionType"
     const val SUBSCRIPTION_LINK = "subscriptionLink"
     const val SUBSCRIPTION_DEDUPLICATION = "subscriptionDeduplication"
@@ -333,6 +334,10 @@ object Key {
     const val SUBSCRIPTION_HTTP_HEADERS = "subscriptionHTTPHeaders"
     const val SUBSCRIPTION_AGE_PRIVATE_KEY = "subscriptionAgePrivateKey"
 
+    const val SUBSCRIPTION_SOURCE_NAME = "subscriptionSourceName"
+    const val EDITING_SOURCE_ID = "editingSourceId"
+    const val EDITING_SOURCE_GROUP_ID = "editingSourceGroupId"
+
     const val EDITING_ASSET_NAME = "editingAssetName"
     const val ASSET_NAME = "assetName"
     const val ASSET_URL = "assetUrl"
@@ -347,6 +352,8 @@ object Key {
     const val GET_INSTALLED_PACKAGES_INITED = "getInstalledPackagesInited"
     const val POST_NOTIFICATION_PERMISSION_REQUESTED = "postNotificationsPermissionRequested"
     const val ACCESS_LOCAL_NETWORK_PERMISSION_REQUESTED = "accessLocalNetworkPermissionRequested"
+
+    const val SUBSCRIPTION_SOURCES_MIGRATED = "subscriptionSourcesMigrated"
 
     const val STUN_SERVER_ADDRESS = "stunServerAddress"
     const val STUN_TEST_TYPE = "stunTestType"

@@ -25,6 +25,7 @@ import io.nekohasekai.sagernet.ExtraType
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.database.*
+import io.nekohasekai.sagernet.bg.GeoIpAnnotator
 import io.nekohasekai.sagernet.fmt.AbstractBean
 import io.nekohasekai.sagernet.fmt.shadowsocks.parseShadowsocksConfig
 import io.nekohasekai.sagernet.ktx.*
@@ -34,11 +35,12 @@ object SIP008Updater : GroupUpdater() {
 
     override suspend fun doUpdate(
         proxyGroup: ProxyGroup,
-        subscription: SubscriptionBean,
+        source: SubscriptionSource,
         userInterface: GroupManager.Interface?,
         byUser: Boolean
     ) {
 
+        val subscription = source.subscription!!
         val link = subscription.link
         val sip008Response: JsonObject
         if (link.startsWith("content://", ignoreCase = true)) {
@@ -100,7 +102,7 @@ object SIP008Updater : GroupUpdater() {
             profiles = profiles.filter { pattern.containsMatchIn(it.name) }.toMutableList()
         }
 
-        val exists = SagerDatabase.proxyDao.getByGroup(proxyGroup.id)
+        val exists = SagerDatabase.proxyDao.getByGroupAndSource(proxyGroup.id, source.id)
         val duplicate = ArrayList<String>()
         if (subscription.deduplication) {
             val uniqueProfiles = LinkedHashSet<AbstractBean>()
@@ -145,14 +147,16 @@ object SIP008Updater : GroupUpdater() {
             val name = bean.displayName()
             if (toReplace.contains(profileId)) {
                 val entity = toReplace[profileId]!!
+                val oldName = entity.displayName()
                 val existsBean = entity.requireBean()
                 existsBean.applyFeatureSettings(bean)
+                bean.name = GeoIpAnnotator.transferAnnotations(oldName, bean.displayName())
                 when {
                     existsBean != bean -> {
                         changed++
                         entity.putBean(bean)
                         toUpdate.add(entity)
-                        updated[entity.displayName()] = name
+                        updated[entity.displayName()] = oldName
                     }
                     entity.userOrder != userOrder -> {
                         entity.putBean(bean)
@@ -163,7 +167,7 @@ object SIP008Updater : GroupUpdater() {
             } else {
                 changed++
                 SagerDatabase.proxyDao.addProxy(ProxyEntity(
-                    groupId = proxyGroup.id, userOrder = userOrder
+                    groupId = proxyGroup.id, sourceId = source.id, userOrder = userOrder
                 ).apply {
                     putBean(bean)
                 })
@@ -176,8 +180,7 @@ object SIP008Updater : GroupUpdater() {
         SagerDatabase.proxyDao.deleteProxy(toDelete)
 
         subscription.lastUpdated = System.currentTimeMillis() / 1000
-        SagerDatabase.groupDao.updateGroup(proxyGroup)
-        finishUpdate(proxyGroup)
+        finishUpdate(source)
 
         if (byUser && userInterface != null) {
             userInterface.onUpdateSuccess(proxyGroup, changed, added, updated, deleted, duplicate)

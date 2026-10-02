@@ -69,10 +69,12 @@ object GeoIpAnnotator {
     const val ASN_DB_URL =
         "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
 
-    // Public fallback APIs ({ip} placeholder).
+    // Public fallback APIs ({ip} placeholder). ipwho.is and i.pn return BOTH
+    // country and ISP; freeipapi returns country + asnOrganization.
     private val API_SERVICES = arrayOf(
-        "https://freeipapi.com/api/json/{ip}",
+        "https://ipwho.is/{ip}",
         "https://i.pn/json/{ip}",
+        "https://freeipapi.com/api/json/{ip}",
     )
     private const val REQUEST_TIMEOUT_MS = 6000
     private const val CIRCUIT_THRESHOLD = 10
@@ -211,7 +213,7 @@ object GeoIpAnnotator {
         geoCache[ip]?.let { return it }
         ensureInit()
 
-        val provider = asnProvider(ip)
+        var provider = asnProvider(ip)   // local ASN MMDB (may be empty)
         var flag = ""
         var country = "Unknown"
 
@@ -229,13 +231,20 @@ object GeoIpAnnotator {
             }
         }
 
-        if (country == "Unknown" && notFound[ip] != true) {
+        // Hit the API when EITHER country or provider is still missing (local
+        // ASN db is often absent, so provider frequently needs the API too).
+        if ((country == "Unknown" && notFound[ip] != true) || provider.isBlank()) {
             val api = apiLookup(ip)
-            if (api.second != "Unknown") {
-                flag = api.first
-                country = api.second
-            } else {
+            if (api.country != "Unknown") {
+                if (country == "Unknown") {
+                    flag = api.flag
+                    country = api.country
+                }
+            } else if (country == "Unknown") {
                 notFound[ip] = true
+            }
+            if (provider.isBlank() && api.provider.isNotBlank()) {
+                provider = api.provider
             }
         }
 
@@ -250,8 +259,33 @@ object GeoIpAnnotator {
         return base * (0.8 + Math.random() * 0.4)
     }
 
-    /** (flag, country) from public APIs, or ("", "Unknown"). Ports get_country_from_api. */
-    private fun apiLookup(ip: String): Pair<String, String> {
+    /** Shorten an ISP/org string the same way asnProvider trims an ASN org. */
+    private fun shortenProvider(org: String): String {
+        val words = org.split(Regex("[^A-Za-z0-9.-]")).filter { it.isNotBlank() }
+        return when {
+            words.isEmpty() -> ""
+            words[0].lowercase() in IGNORE_ASN_WORDS && words.size > 1 -> words[1]
+            else -> words[0]
+        }
+    }
+
+    /** Pull an ISP/provider name out of whatever shape the API returned. */
+    private fun providerFromJson(json: JSONObject): String {
+        // ipwho.is nests it under "connection".
+        json.optJSONObject("connection")?.let { conn ->
+            val v = conn.optString("isp", conn.optString("org", ""))
+            if (v.isNotBlank()) return shortenProvider(v)
+        }
+        // i.pn: isp/org/asName ; freeipapi: asnOrganization.
+        for (key in arrayOf("isp", "asName", "org", "asnOrganization")) {
+            val v = json.optString(key, "")
+            if (v.isNotBlank()) return shortenProvider(v)
+        }
+        return ""
+    }
+
+    /** GeoInfo from public APIs, or UNKNOWN. Ports get_country_from_api (+ ISP). */
+    private fun apiLookup(ip: String): GeoInfo {
         for (apiUrl in API_SERVICES) {
             val state = apiState[apiUrl]!!
             val now = System.currentTimeMillis()
@@ -267,11 +301,12 @@ object GeoIpAnnotator {
             }
 
             try {
-                val conn = URL(apiUrl.replace("{ip}", ip)).openConnection().apply {
-                    connectTimeout = REQUEST_TIMEOUT_MS
-                    readTimeout = REQUEST_TIMEOUT_MS
-                    setRequestProperty("User-Agent", "Exclave")
-                } as java.net.HttpURLConnection
+                val conn = URL(apiUrl.replace("{ip}", ip)).openConnection()
+                    as java.net.HttpURLConnection
+                conn.connectTimeout = REQUEST_TIMEOUT_MS
+                conn.readTimeout = REQUEST_TIMEOUT_MS
+                conn.instanceFollowRedirects = true   // freeipapi 307-redirects
+                conn.setRequestProperty("User-Agent", "Exclave")
                 try {
                     val code = conn.responseCode
                     if (code == 429) {
@@ -283,11 +318,13 @@ object GeoIpAnnotator {
                         val json = JSONObject(body)
                         val country = json.optString("countryName",
                             json.optString("country", "Unknown"))
-                        val cc = json.optString("countryCode", "")
+                        val cc = json.optString("countryCode",
+                            json.optString("country_code", ""))
+                        val provider = providerFromJson(json)
                         if (country.isNotEmpty() && country != "Unknown") {
                             state.consecutiveErrors = maxOf(0, state.consecutiveErrors - 1)
                             state.lastCall = System.currentTimeMillis()
-                            return codeToFlag(cc) to country
+                            return GeoInfo(codeToFlag(cc), country, provider)
                         }
                     }
                 } finally {
@@ -303,7 +340,7 @@ object GeoIpAnnotator {
                 Logs.w("GeoIP circuit breaker open for $apiUrl")
             }
         }
-        return "" to "Unknown"
+        return GeoInfo.UNKNOWN
     }
 
     // Matches the leading flag(regional-indicator pair) + "country (provider)" suffix.
@@ -313,6 +350,37 @@ object GeoIpAnnotator {
 
     /** Strip a previously-appended geo tag so re-annotation doesn't stack suffixes. */
     fun stripGeoTag(name: String): String = name.replace(GEO_TAG_REGEX, "").trimEnd()
+
+    /** Return the trailing geo tag (incl. leading whitespace) of [name], or "". */
+    fun geoTagOf(name: String): String = GEO_TAG_REGEX.find(name)?.value ?: ""
+
+    // Leading speed marker (emoji) + Mbps number written by the speed test, e.g.
+    // "✨ 42.3 <name>". Kept in sync with ConfigurationFragment.speedTest().
+    private val SPEED_MARKER_REGEX = Regex(
+        "^[\\x{2728}\\x{2B50}\\x{1F3C1}\\x{1F3F3}\\uFE0F]+\\s*[0-9]+(?:\\.[0-9]+)?\\s+"
+    )
+
+    /** Return the leading speed marker of [name], or "". */
+    fun speedMarkerOf(name: String): String = SPEED_MARKER_REGEX.find(name)?.value ?: ""
+
+    /** Strip the leading speed marker from [name]. */
+    fun stripSpeedMarker(name: String): String = name.replace(SPEED_MARKER_REGEX, "")
+
+    /**
+     * Carry a profile's geo/speed annotations from [oldName] onto a [freshName]
+     * coming from a subscription refresh, so updating a subscription does not
+     * wipe the user's annotations. Returns the fresh name wrapped with the old
+     * speed-marker prefix and geo-tag suffix (when present).
+     */
+    fun transferAnnotations(oldName: String, freshName: String): String {
+        val speed = speedMarkerOf(oldName)
+        val geo = geoTagOf(oldName)
+        // Normalise the fresh name: drop any annotations it may already carry.
+        var base = stripSpeedMarker(stripGeoTag(freshName)).trim()
+        if (geo.isNotEmpty()) base = "$base ${geo.trim()}".trim()
+        if (speed.isNotEmpty()) base = "${speed.trim()} $base".trim()
+        return base
+    }
 
     /** Append (or replace) the geo tag inside the profile display name. */
     fun annotateName(originalName: String, info: GeoInfo): String {

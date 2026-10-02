@@ -43,7 +43,7 @@ object SubscriptionUpdater {
     suspend fun reconfigureUpdater() {
         RemoteWorkManager.getInstance(app).cancelUniqueWork(WORK_NAME)
 
-        val subscriptions = SagerDatabase.groupDao.subscriptions()
+        val subscriptions = SagerDatabase.sourceDao.all()
             .filter { it.subscription!!.autoUpdate }
         if (subscriptions.isEmpty()) return
 
@@ -79,14 +79,14 @@ object SubscriptionUpdater {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
 
         override suspend fun doWork(): Result {
-            var subscriptions = SagerDatabase.groupDao.subscriptions()
+            var subscriptions = SagerDatabase.sourceDao.all()
                 .filter { it.subscription!!.autoUpdate }
             if (!(SagerNet.started && DataStore.startedProfile > 0)) {
                 subscriptions = subscriptions.filter { !it.subscription!!.updateWhenConnectedOnly }
             }
 
-            if (subscriptions.isNotEmpty()) for (profile in subscriptions) {
-                val subscription = profile.subscription!!
+            if (subscriptions.isNotEmpty()) for (source in subscriptions) {
+                val subscription = source.subscription!!
 
                 if (((System.currentTimeMillis() / 1000).toInt() - subscription.lastUpdated) < subscription.autoUpdateDelay * 60) {
                     continue
@@ -94,12 +94,12 @@ object SubscriptionUpdater {
 
                 notification.setContentText(
                     applicationContext.getString(
-                        R.string.subscription_update_message, profile.displayName()
+                        R.string.subscription_update_message, source.displayName()
                     )
                 )
                 nm.notify(2, notification.build())
 
-                GroupUpdater.executeUpdate(profile, false)
+                GroupUpdater.executeUpdate(source, false)
             }
 
             nm.cancel(2)
