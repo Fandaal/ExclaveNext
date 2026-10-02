@@ -218,6 +218,12 @@
         <activity
             android:name="io.nekohasekai.sagernet.ui.AssetsActivity" />
         <activity
+            android:name="io.nekohasekai.sagernet.ui.GeoIpSettingsActivity" />
+        <activity
+            android:name="io.nekohasekai.sagernet.ui.GeoIpProviderListActivity" />
+        <activity
+            android:name="io.nekohasekai.sagernet.ui.GeoIpDatabaseActivity" />
+        <activity
             android:name="io.nekohasekai.sagernet.ui.AssetEditActivity" />
         <activity
             android:name="io.nekohasekai.sagernet.ui.AppListActivity" />

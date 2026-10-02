@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_add_provider"
+        android:icon="@drawable/ic_action_note_add"
+        android:title="@string/geoip_add_provider"
+        app:showAsAction="always">
+        <menu>
+            <item
+                android:id="@+id/action_add_mmdb_country"
+                android:title="@string/geoip_type_local" />
+            <item
+                android:id="@+id/action_add_api"
+                android:title="@string/geoip_type_api" />
+        </menu>
+    </item>
+
+</menu>

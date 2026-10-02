@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        app:key="geoip_provider_chain"
+        app:summary="@string/geoip_provider_chain_sum"
+        app:title="@string/geoip_provider_chain" />
+
+    <Preference
+        app:key="geoip_local_databases"
+        app:summary="@string/geoip_local_databases_sum"
+        app:title="@string/geoip_local_databases" />
+
+    <!-- Auto-update of the databases is Phase 7 (GeoIpScheduler / WorkManager);
+         it is deliberately absent here so this screen does not show a switch
+         that nothing reads. -->
+
+</PreferenceScreen>

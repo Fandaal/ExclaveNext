@@ -632,6 +632,10 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
         // misc settings
         findPreference<SwitchPreference>(Key.SHOW_GROUP_NAME)!!.onPreferenceChangeListener = reloadListener
         findPreference<SwitchPreference>(Key.ACQUIRE_WAKE_LOCK)!!.onPreferenceChangeListener = reloadListener
+        findPreference<Preference>("geoip_settings")!!.setOnPreferenceClickListener {
+            startActivity(Intent(requireContext(), GeoIpSettingsActivity::class.java))
+            true
+        }
         findPreference<ListPreference>(Key.FAB_STYLE)!!.setOnPreferenceChangeListener { _, _ ->
             requireActivity().apply {
                 this.finish()

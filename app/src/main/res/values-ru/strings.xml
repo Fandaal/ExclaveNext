@@ -601,4 +601,47 @@
     <string name="ssh_host_key">Ключ хоста</string>
     <string name="naiveproxy_tunnel_timeout">Тайм-аут туннеля (с)</string>
     <string name="naiveproxy_idle_timeout">Тайм-аут бездействия (с)</string>
+
+    <!-- Exclave Next: GeoIP settings -->
+    <string name="geoip_settings">GeoIP</string>
+    <string name="geoip_settings_sum">Цепочка провайдеров и локальные базы MaxMind</string>
+    <string name="geoip_provider_chain">Цепочка провайдеров</string>
+    <string name="geoip_provider_chain_sum">Поиск идёт по включённым звеньям по порядку, пока не найдены страна и провайдер</string>
+    <string name="geoip_local_databases">Локальные базы</string>
+    <string name="geoip_local_databases_sum">Файлы GeoLite2 MaxMind — скачанные или импортированные</string>
+    <string name="geoip_license_key">Лицензионный ключ MaxMind</string>
+    <string name="geoip_license_key_sum">Необязательно. Пусто — используется публичное зеркало вместо download.maxmind.com</string>
+    <string name="geoip_add_provider">Добавить провайдера</string>
+    <string name="geoip_url_hint">https://ipwho.is/{ip}</string>
+    <string name="geoip_url_label">URL</string>
+    <string name="geoip_file_label">Имя файла</string>
+    <string name="geoip_type_local">Локальная база</string>
+    <string name="geoip_type_api">Онлайн API</string>
+    <string name="geoip_entry_type">Тип</string>
+    <string name="geoip_entry_country">страна</string>
+    <string name="geoip_entry_provider">провайдер</string>
+    <string name="geoip_active_n_of_m">активных %1$d из %2$d</string>
+    <string name="geoip_db_build_date">Дата сборки: %s</string>
+    <string name="geoip_db_size">Размер: %s</string>
+    <string name="geoip_db_etag">ETag: %s</string>
+    <string name="geoip_db_not_installed">Не установлена</string>
+    <string name="geoip_update_all">Обновить все</string>
+    <string name="geoip_update">Обновить</string>
+    <string name="geoip_import">Импорт из файла</string>
+    <string name="geoip_delete">Удалить</string>
+    <string name="geoip_test_lookup">Тестовый запрос</string>
+    <string name="geoip_test_lookup_sum">Определить IP и показать, что вернуло каждое звено цепочки</string>
+    <string name="geoip_test_ip_hint">IP-адрес</string>
+    <string name="geoip_trace">Трассировка</string>
+    <string name="geoip_no_provider">Не включён ни один провайдер GeoIP. Включите хотя бы одно звено цепочки.</string>
+    <string name="geoip_already_up_to_date">Уже актуально</string>
+    <string name="geoip_updated">Обновлено</string>
+    <string name="geoip_invalid_db">Это не база MaxMind, файл отклонён</string>
+    <string name="geoip_update_failed">Ошибка обновления: %s</string>
+    <string name="geoip_delete_confirm">Удалить %s?</string>
+    <string name="geoip_moved">Перемещено с позиции %1$d на %2$d</string>
+    <string name="geoip_entry_removed">Звено удалено</string>
+    <string name="geoip_no_placeholder">В URL должен быть {ip}</string>
+    <string name="geoip_bad_url">Некорректный URL</string>
+    <string name="geoip_disabled_suffix">(выключено)</string>
 </resources>

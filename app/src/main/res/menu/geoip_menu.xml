@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/geoip_test_lookup"
+        android:title="@string/geoip_test_lookup"
+        app:showAsAction="never" />
+
+</menu>

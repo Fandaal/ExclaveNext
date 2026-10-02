@@ -459,6 +459,11 @@
             app:icon="@drawable/baseline_developer_board_24"
             app:key="acquireWakeLock"
             app:title="@string/acquire_wake_lock" />
+        <Preference
+            app:icon="@drawable/baseline_public_24"
+            app:key="geoip_settings"
+            app:summary="@string/geoip_settings_sum"
+            app:title="@string/geoip_settings" />
         <EditTextPreference
             app:dialogMessage="@string/one_per_line"
             app:icon="@drawable/ic_hardware_router"

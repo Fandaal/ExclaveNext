@@ -158,8 +158,11 @@ object GeoIpAnnotator {
     /**
      * Build the resolver for one chain entry, or null when the entry cannot
      * work: a local database that is not installed, or an API with no URL.
+     *
+     * internal, not private: the file-level trace() below needs it to run one
+     * entry at a time without duplicating this mapping.
      */
-    private fun resolverFor(entry: GeoIpEntry): GeoIpResolver? = when (entry.type) {
+    internal fun resolverFor(entry: GeoIpEntry): GeoIpResolver? = when (entry.type) {
         GeoIpEntryType.MMDB_COUNTRY -> countryReader?.let { MmdbCountryResolver(it) }
         GeoIpEntryType.MMDB_ASN -> asnReader?.let { MmdbAsnResolver(it) }
         GeoIpEntryType.API -> if (entry.url.isBlank()) null else ApiResolver(entry.url)
@@ -183,8 +186,9 @@ object GeoIpAnnotator {
         return result
     }
 
+
 /**
-     * Find the index of the first country-flag emoji (regional indicator symbol)
+ * Find the index of the first country-flag emoji (regional indicator symbol)
      * in [name]. Country flags are pairs of regional indicators U+1F1E6..U+1F1FF.
      * Returns -1 if none found. Uses codePoint iteration to correctly handle
      * supplementary-plane characters on JVM (where they are surrogate pairs).
@@ -264,4 +268,86 @@ object GeoIpAnnotator {
     fun annotateName(originalName: String, info: GeoInfo): String {
         return if (info.isKnown) info.tag() else stripGeoTag(originalName).trimEnd()
     }
+}
+
+
+/**
+ * One line of a lookup trace: what a single chain entry did for a single IP.
+ *
+ * @param label human-readable name of the entry (file name or API host)
+ * @param consulted false when the entry was skipped (disabled, or the resolver
+ *   could not be built at all — a missing local database, an empty API URL)
+ * @param country/provider what this entry contributed to the merged result
+ * @param error the failure message when the entry was asked and failed
+ */
+data class GeoInfoTraceLine(
+    val label: String,
+    val consulted: Boolean,
+    val country: String = "",
+    val provider: String = "",
+    val error: String = "",
+)
+
+/**
+ * Run the chain for [ip] and report every entry, not just the merged answer.
+ *
+ * Same order and same first-hit-wins merge as [lookup], but nothing is cached:
+ * a trace exists to show what the chain actually does right now, so a cached
+ * result from an earlier run would be misleading. Intended for the settings
+ * screen, where a single manual lookup is cheap.
+ */
+fun GeoIpAnnotator.trace(ip: String): List<GeoInfoTraceLine> {
+    ensureInit()
+    val lines = ArrayList<GeoInfoTraceLine>()
+    var country = ""
+    var provider = ""
+
+    for (entry in DataStore.geoIpChain) {
+        val label = traceLabelOf(entry)
+        if (!entry.enabled) {
+            lines.add(GeoInfoTraceLine(label, consulted = false, error = "disabled"))
+            continue
+        }
+        val resolver = resolverFor(entry)
+        if (resolver == null) {
+            lines.add(GeoInfoTraceLine(label, consulted = false, error = "unavailable"))
+            continue
+        }
+
+        val fragment = try {
+            resolver.resolve(ip)
+        } catch (e: GeoIpLookupException) {
+            lines.add(GeoInfoTraceLine(label, consulted = true, error = e.message ?: "failed"))
+            continue
+        } catch (e: Exception) {
+            lines.add(GeoInfoTraceLine(label, consulted = true, error = e.message ?: "failed"))
+            continue
+        }
+
+        val tookCountry = country.isEmpty() && fragment.country.isNotEmpty()
+        val tookProvider = provider.isEmpty() && fragment.provider.isNotEmpty()
+        if (tookCountry) country = fragment.country
+        if (tookProvider) provider = fragment.provider
+
+        lines.add(
+            GeoInfoTraceLine(
+                label = label,
+                consulted = true,
+                // Report only what this entry actually contributed: a field that
+                // was already filled by an earlier entry is not its result.
+                country = if (tookCountry) fragment.country else "",
+                provider = if (tookProvider) fragment.provider else "",
+            )
+        )
+
+        if (country.isNotEmpty() && provider.isNotEmpty()) break
+    }
+    return lines
+}
+
+private fun traceLabelOf(entry: GeoIpEntry): String = when {
+    entry.isLocal && entry.file.isNotEmpty() -> entry.file
+    entry.url.isNotBlank() -> entry.url
+    entry.isLocal -> entry.type
+    else -> entry.type
 }

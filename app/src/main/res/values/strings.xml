@@ -656,4 +656,47 @@
     <string name="snell_obfs_uri">Obfuscation URI</string>
     <string name="naiveproxy_tunnel_timeout">Tunnel timeout (s)</string>
     <string name="naiveproxy_idle_timeout">Idle timeout (s)</string>
+
+    <!-- Exclave Next: GeoIP settings -->
+    <string name="geoip_settings">GeoIP</string>
+    <string name="geoip_settings_sum">Provider chain and local MaxMind databases</string>
+    <string name="geoip_provider_chain">Provider chain</string>
+    <string name="geoip_provider_chain_sum">Lookup tries each enabled entry in order until country and provider are both known</string>
+    <string name="geoip_local_databases">Local databases</string>
+    <string name="geoip_local_databases_sum">GeoLite2 MaxMind files, downloaded or imported</string>
+    <string name="geoip_license_key">MaxMind license key</string>
+    <string name="geoip_license_key_sum">Optional. Empty uses the public mirror instead of download.maxmind.com</string>
+    <string name="geoip_add_provider">Add provider</string>
+    <string name="geoip_url_hint">https://ipwho.is/{ip}</string>
+    <string name="geoip_url_label">URL</string>
+    <string name="geoip_file_label">File name</string>
+    <string name="geoip_type_local">Local database</string>
+    <string name="geoip_type_api">Online API</string>
+    <string name="geoip_entry_type">Type</string>
+    <string name="geoip_entry_country">country</string>
+    <string name="geoip_entry_provider">provider</string>
+    <string name="geoip_active_n_of_m">%1$d active of %2$d</string>
+    <string name="geoip_db_build_date">Build date: %s</string>
+    <string name="geoip_db_size">Size: %s</string>
+    <string name="geoip_db_etag">ETag: %s</string>
+    <string name="geoip_db_not_installed">Not installed</string>
+    <string name="geoip_update_all">Update all</string>
+    <string name="geoip_update">Update</string>
+    <string name="geoip_import">Import from file</string>
+    <string name="geoip_delete">Delete</string>
+    <string name="geoip_test_lookup">Test lookup</string>
+    <string name="geoip_test_lookup_sum">Resolve an IP and show what each chain entry returned</string>
+    <string name="geoip_test_ip_hint">IP address</string>
+    <string name="geoip_trace">Trace</string>
+    <string name="geoip_no_provider">No GeoIP provider is enabled. Enable at least one entry in the provider chain.</string>
+    <string name="geoip_already_up_to_date">Already up to date</string>
+    <string name="geoip_updated">Updated</string>
+    <string name="geoip_invalid_db">Not a MaxMind database, file rejected</string>
+    <string name="geoip_update_failed">Update failed: %s</string>
+    <string name="geoip_delete_confirm">Delete %s?</string>
+    <string name="geoip_moved">Moved from position %1$d to %2$d</string>
+    <string name="geoip_entry_removed">Entry removed</string>
+    <string name="geoip_no_placeholder">The URL must contain {ip}</string>
+    <string name="geoip_bad_url">Not a valid URL</string>
+    <string name="geoip_disabled_suffix">(disabled)</string>
 </resources>
