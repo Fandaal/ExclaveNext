@@ -238,6 +238,12 @@
             app:key="connectionTestTimeout"
             app:title="@string/connection_test_custom_timeout"
             app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="1"
+            app:icon="@drawable/ic_baseline_multiple_stop_24"
+            app:key="connectionTestRounds"
+            app:title="@string/connection_test_rounds"
+            app:useSimpleSummaryProvider="true" />
         <SwitchPreference
             app:icon="@drawable/baseline_construction_24"
             app:key="realityDisableX25519Mlkem768"

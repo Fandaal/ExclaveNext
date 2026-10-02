@@ -89,6 +89,12 @@
     <string name="connection_test_custom_concurrency">URL test concurrency</string>
     <string name="connection_test_custom_concurrency_invalid">Concurrency must be a positive integer</string>
     <string name="connection_test_custom_timeout">URL test timeout (ms)</string>
+    <string name="connection_test_rounds">URL test rounds</string>
+    <string name="action_annotate_geoip">Annotate country / ISP</string>
+    <string name="action_speed_test">Speed test</string>
+    <string name="geoip_db_missing">GeoLite2 databases not found. Download them from Route \u2192 Assets, or annotation will use the online API only.</string>
+    <string name="annotate_done">Annotated %1$d profiles</string>
+    <string name="speed_test_done">Speed test finished: %1$d profiles</string>
     <string name="connection_test_custom_timeout_invalid">Timeout must be a positive integer</string>
     <string name="probe_url">Custom test URL</string>
     <!-- proxy category -->
@@ -219,6 +225,7 @@
     <string name="action_export">Export</string>
     <string name="action_import">Import from clipboard</string>
     <string name="action_import_file">Import from file</string>
+    <string name="action_import_folder">Import from folder (.txt)</string>
     <string name="action_export_msg">Successfully export!</string>
     <string name="action_export_err">Failed to export.</string>
     <string name="action_import_msg">Successfully import!</string>
@@ -253,6 +260,7 @@
     <string name="no_proxies_found">No proxy found in the link</string>
     <string name="no_proxies_found_in_subscription">No proxy found in the subscription</string>
     <string name="no_proxies_found_in_file">No proxy found in the file</string>
+    <string name="no_txt_in_folder">No .txt files found in the selected folder</string>
     <string name="no_proxies_found_in_clipboard">No proxy found in the clipboard</string>
     <string name="deduplication">Deduplication</string>
     <string name="ignore_battery_optimizations">Ignore battery optimizations</string>

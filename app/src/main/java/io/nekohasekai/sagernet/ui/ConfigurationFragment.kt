@@ -287,6 +287,69 @@ class ConfigurationFragment @JvmOverloads constructor(
         return super.onKeyDown(ketCode, event)
     }
 
+    val importFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+        if (treeUri != null) runOnDefaultDispatcher {
+            try {
+                val ctx = requireContext()
+                try {
+                    ctx.contentResolver.takePersistableUriPermission(
+                        treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (_: Exception) {
+                }
+                val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(ctx, treeUri)
+                val txtFiles = tree?.listFiles()?.filter {
+                    it.isFile && (it.name?.endsWith(".txt", ignoreCase = true) == true)
+                } ?: emptyList()
+
+                if (txtFiles.isEmpty()) {
+                    onMainDispatcher {
+                        snackbar(getString(R.string.no_txt_in_folder)).show()
+                    }
+                    return@runOnDefaultDispatcher
+                }
+
+                val proxies = mutableListOf<AbstractBean>()
+                for (doc in txtFiles) {
+                    try {
+                        val fileText = ctx.contentResolver.openInputStream(doc.uri)?.use {
+                            it.bufferedReader().readText()
+                        } ?: continue
+                        RawUpdater.parseRaw(fileText)?.let { pl -> proxies.addAll(pl) }
+                    } catch (e: Exception) {
+                        Logs.w(e)
+                    }
+                }
+
+                if (proxies.isEmpty()) {
+                    onMainDispatcher {
+                        snackbar(getString(R.string.no_proxies_found_in_file)).show()
+                    }
+                } else import(proxies)
+            } catch (e: Exception) {
+                Logs.w(e)
+                onMainDispatcher {
+                    snackbar(e.readableMessage).show()
+                }
+            }
+        }
+    }
+
+    // Download a subscription URL and parse it into proxy beans, so a URL
+    // pasted from the clipboard can be imported into the CURRENT group instead
+    // of spawning a new subscription group. Mirrors RawUpdater's HTTP path.
+    private fun fetchSubscriptionProxies(url: String): List<AbstractBean>? {
+        val response = libexclavecore.Libexclavecore.newHttpClient().apply {
+            if (SagerNet.started && DataStore.startedProfile > 0) {
+                useUDS(SagerNet.deviceStorage.noBackupFilesDir.toString() + "/ipc.sock")
+            }
+        }.newRequest().apply {
+            setURL(url)
+            setUserAgent(USER_AGENT)
+        }.execute()
+        return RawUpdater.parseRaw(response.contentString)
+    }
+
     val importFile = registerForActivityResult(ActivityResultContracts.GetContent()) { file ->
         var fileText = ""
         if (file != null) runOnDefaultDispatcher {
@@ -321,7 +384,17 @@ class ConfigurationFragment @JvmOverloads constructor(
 
                 if (proxies.isEmpty()) {
                     if (!fileText.contains("\n") && !fileText.contains("\r") && isHTTPorHTTPSURL(fileText)) {
-                        (requireActivity() as? MainActivity)?.importSubscription(fileText)
+                        val fetched = try {
+                            fetchSubscriptionProxies(fileText)
+                        } catch (e: Exception) {
+                            Logs.w(e)
+                            null
+                        }
+                        if (!fetched.isNullOrEmpty()) {
+                            import(fetched)
+                        } else onMainDispatcher {
+                            snackbar(getString(R.string.no_proxies_found_in_subscription)).show()
+                        }
                     } else {
                         onMainDispatcher {
                             snackbar(getString(R.string.no_proxies_found_in_file)).show()
@@ -422,7 +495,20 @@ class ConfigurationFragment @JvmOverloads constructor(
                             val proxies = RawUpdater.parseRaw(text)
                             if (proxies.isNullOrEmpty()) {
                                 if (!text.contains("\n") && !text.contains("\r") && isHTTPorHTTPSURL(text)) {
-                                    (requireActivity() as? MainActivity)?.importSubscription(text)
+                                    // Subscription URL in clipboard: download it and import the
+                                    // configs into the CURRENTLY selected group, instead of
+                                    // creating a brand-new subscription group.
+                                    val fetched = try {
+                                        fetchSubscriptionProxies(text)
+                                    } catch (e: Exception) {
+                                        Logs.w(e)
+                                        null
+                                    }
+                                    if (!fetched.isNullOrEmpty()) {
+                                        import(fetched)
+                                    } else onMainDispatcher {
+                                        snackbar(getString(R.string.no_proxies_found_in_subscription)).show()
+                                    }
                                 } else onMainDispatcher {
                                     snackbar(getString(R.string.no_proxies_found_in_clipboard)).show()
                                 }
@@ -440,6 +526,13 @@ class ConfigurationFragment @JvmOverloads constructor(
             }
             R.id.action_import_file -> {
                 startFilesForResult(importFile, "*/*")
+            }
+            R.id.action_import_folder -> {
+                try {
+                    importFolder.launch(null)
+                } catch (_: Exception) {
+                    snackbar(getString(R.string.file_manager_missing)).show()
+                }
             }
             R.id.action_import_backup_clipboard -> {
                 val text = SagerNet.getClipboardText()
@@ -668,6 +761,12 @@ class ConfigurationFragment @JvmOverloads constructor(
             R.id.action_connection_url_test -> {
                 urlTest()
             }
+            R.id.action_annotate_geoip -> {
+                annotateGeoip()
+            }
+            R.id.action_speed_test -> {
+                speedTest()
+            }
             R.id.action_update_subscription -> {
                 runOnDefaultDispatcher {
                     val currentGroup = DataStore.currentGroup()
@@ -835,64 +934,294 @@ class ConfigurationFragment @JvmOverloads constructor(
             profilesUnfiltered = profilesUnfiltered.filter {
                 !it.useBrowserForwarder()
             }
-            val profiles = ConcurrentLinkedQueue(profilesUnfiltered)
 
             val profileCount = profilesUnfiltered.size
             var finishedProfileCount = 0
-            //stopService()
 
             val link = DataStore.connectionTestURL
             val timeout = DataStore.connectionTestTimeout
+            val rounds = DataStore.connectionTestRounds.coerceAtLeast(1)
 
-            repeat(DataStore.connectionTestConcurrency) {
-                testJobs.add(launch {
+            // Insert all profiles into the dialog once, reset status.
+            for (profile in profilesUnfiltered) {
+                profile.status = 0
+                test.insert(profile)
+            }
+
+            // A profile is considered dead only if it fails EVERY round.
+            // We keep retrying only the ones that haven't succeeded yet.
+            var pending = ConcurrentLinkedQueue(profilesUnfiltered)
+
+            for (round in 1..rounds) {
+                if (pending.isEmpty()) break
+                if (!isActive) break
+
+                val roundList = pending.toList()
+                val stillPending = ConcurrentLinkedQueue<ProxyEntity>()
+                val queue = ConcurrentLinkedQueue(roundList)
+
+                onMainDispatcher {
+                    // TODO: fix l10n — show current round in the neutral button.
+                    dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
+                        "$finishedProfileCount/$profileCount ($round/$rounds)"
+                }
+
+                testJobs.clear()
+                repeat(DataStore.connectionTestConcurrency) {
+                    testJobs.add(launch {
+                        while (isActive) {
+                            val profile = queue.poll() ?: break
+                            // On a retry round, mark the profile as testing again.
+                            if (round > 1) {
+                                profile.status = 0
+                                test.update(profile)
+                            }
+
+                            try {
+                                val instance = if (DataStore.tunImplementation == TunImplementation.SYSTEM && DataStore.serviceMode == Key.MODE_VPN && SagerNet.started && DataStore.startedProfile > 0) {
+                                    V2RayTestInstance(profile, link, timeout, protectPath = SagerNet.deviceStorage.noBackupFilesDir.toString() + "/protect_path")
+                                } else {
+                                    V2RayTestInstance(profile, link, timeout)
+                                }
+                                val result = instance.use {
+                                    it.doTest()
+                                }
+                                profile.status = 1
+                                profile.ping = result
+                                profile.error = null
+                            } catch (e: PluginManager.PluginNotFoundException) {
+                                // Plugin missing — retrying won't help, don't re-queue.
+                                profile.status = -1
+                                profile.error = e.readableMessage
+                            } catch (e: Exception) {
+                                profile.status = 3
+                                profile.error = e.readableMessage
+                                // Only genuine failures (status 3) get another chance.
+                                if (round < rounds) {
+                                    stillPending.add(profile)
+                                }
+                            }
+
+                            // Count a profile as "finished" only on its final attempt
+                            // (either it succeeded, or this is the last round, or it's a plugin error).
+                            val isFinal = profile.status == 1 || profile.status == -1 ||
+                                profile !in stillPending
+                            if (isFinal) {
+                                onMainDispatcher {
+                                    finishedProfileCount++
+                                    test.binding.progressCircular.apply {
+                                        isVisible = true
+                                        setProgressCompat(
+                                            ((finishedProfileCount.toDouble() / profileCount.toDouble()) * 100).toInt(),
+                                            true
+                                        )
+                                    }
+                                    dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
+                                        "$finishedProfileCount/$profileCount ($round/$rounds)"
+                                }
+                            }
+
+                            test.update(profile)
+                            ProfileManager.updateProfile(profile)
+                        }
+                    })
+                }
+
+                testJobs.joinAll()
+                pending = stillPending
+            }
+
+            test.close()
+            onMainDispatcher {
+                test.binding.progressCircular.isGone = true
+                dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setText(android.R.string.ok)
+            }
+        }
+        test.cancel = {
+            mainJob.cancel()
+            runOnDefaultDispatcher {
+                GroupManager.postReload(DataStore.currentGroupId())
+            }
+        }
+    }
+
+    // --- Exclave Next: GeoIP / ISP annotation of the current group ----------
+    // Resolves each profile's server to an IP, looks up country + provider
+    // (local MaxMind MMDB first, then the online API fallback), and writes the
+    // "<name> 🇩🇪 Germany (Hetzner)" tag into the profile display name. No new
+    // database columns — the annotation lives entirely inside bean.name.
+    @Suppress("EXPERIMENTAL_API_USAGE")
+    fun annotateGeoip() {
+        val test = TestDialog()
+        val dialog = test.builder.show()
+        dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
+
+        if (!io.nekohasekai.sagernet.bg.GeoIpAnnotator.hasLocalDatabases()) {
+            snackbar(getString(R.string.geoip_db_missing)).show()
+        }
+
+        val mainJob = runOnDefaultDispatcher {
+            val group = DataStore.currentGroup()
+            val profiles = SagerDatabase.proxyDao.getByGroup(group.id)
+            val profileCount = profiles.size
+            var finished = 0
+
+            io.nekohasekai.sagernet.bg.GeoIpAnnotator.ensureInit()
+
+            val queue = ConcurrentLinkedQueue(profiles)
+            val jobs = mutableListOf<Job>()
+            // DNS/GeoIP are IO-bound; a small worker pool keeps the UI responsive.
+            repeat(DataStore.connectionTestConcurrency.coerceAtLeast(1)) {
+                jobs.add(launch {
                     while (isActive) {
-                        val profile = profiles.poll() ?: break
+                        val profile = queue.poll() ?: break
                         profile.status = 0
                         test.insert(profile)
-
                         try {
-                            val instance = if (DataStore.tunImplementation == TunImplementation.SYSTEM && DataStore.serviceMode == Key.MODE_VPN && SagerNet.started && DataStore.startedProfile > 0) {
-                                V2RayTestInstance(profile, link, timeout, protectPath = SagerNet.deviceStorage.noBackupFilesDir.toString() + "/protect_path")
+                            val bean = profile.requireBean()
+                            val host = bean.serverAddress ?: ""
+                            val ip = io.nekohasekai.sagernet.bg.GeoIpAnnotator.resolveToIp(host)
+                            if (ip != null) {
+                                val info = io.nekohasekai.sagernet.bg.GeoIpAnnotator.lookup(ip)
+                                val newName = io.nekohasekai.sagernet.bg.GeoIpAnnotator
+                                    .annotateName(bean.name ?: "", info)
+                                bean.name = newName
+                                profile.putBean(bean)
+                                profile.status = if (info.isKnown) 1 else 3
+                                profile.error = if (info.isKnown) info.tag() else "Unknown"
                             } else {
-                                V2RayTestInstance(profile, link, timeout)
+                                profile.status = 3
+                                profile.error = "DNS error"
                             }
-                            val result = instance.use {
-                                it.doTest()
-                            }
-                            profile.status = 1
-                            profile.ping = result
-                        } catch (e: PluginManager.PluginNotFoundException) {
-                            profile.status = -1
-                            profile.error = e.readableMessage
                         } catch (e: Exception) {
                             profile.status = 3
                             profile.error = e.readableMessage
                         }
                         onMainDispatcher {
-                            finishedProfileCount++
+                            finished++
                             test.binding.progressCircular.apply {
                                 isVisible = true
                                 setProgressCompat(
-                                    ((finishedProfileCount.toDouble() / profileCount.toDouble()) * 100).toInt(),
+                                    ((finished.toDouble() / profileCount.toDouble()) * 100).toInt(),
                                     true
                                 )
                             }
-                            // TODO: fix l10n
-                            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text = "$finishedProfileCount/$profileCount"
+                            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
+                                "$finished/$profileCount"
                         }
-
                         test.update(profile)
                         ProfileManager.updateProfile(profile)
                     }
                 })
             }
-
-            testJobs.joinAll()
+            jobs.joinAll()
             test.close()
             onMainDispatcher {
                 test.binding.progressCircular.isGone = true
                 dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setText(android.R.string.ok)
+                snackbar(getString(R.string.annotate_done, profileCount)).show()
+            }
+        }
+        test.cancel = {
+            mainJob.cancel()
+            runOnDefaultDispatcher {
+                GroupManager.postReload(DataStore.currentGroupId())
+            }
+        }
+    }
+
+    // --- Exclave Next: speed test of the current group ----------------------
+    // Starts each profile as a local SOCKS proxy (via the core) and measures
+    // ping + download. Low concurrency by default so probes don't share the
+    // link. The measured download speed is written into the profile ping field
+    // used by the test dialog and appended to the display name.
+    @Suppress("EXPERIMENTAL_API_USAGE")
+    fun speedTest() {
+        val test = TestDialog()
+        val dialog = test.builder.show()
+        dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
+
+        val mainJob = runOnDefaultDispatcher {
+            val group = DataStore.currentGroup()
+            // Only test profiles that passed the URL test (status == 1), if any
+            // were tested; otherwise fall back to the whole group.
+            val all = SagerDatabase.proxyDao.getByGroup(group.id).filter {
+                !it.useBrowserForwarder()
+            }
+            val tested = all.filter { it.status == 1 }
+            val profiles = if (tested.isNotEmpty()) tested else all
+
+            val profileCount = profiles.size
+            var finished = 0
+
+            val pingUrl = "http://cp.cloudflare.com/"
+            val downloadUrl = "https://speed.cloudflare.com/__down?bytes=10485760"
+            val timeout = DataStore.connectionTestTimeout
+            val maxDuration = 5000L
+
+            val queue = ConcurrentLinkedQueue(profiles)
+            val jobs = mutableListOf<Job>()
+            // Default to a single worker: parallel probes split the bandwidth and
+            // skew results. connectionTestConcurrency can raise it intentionally.
+            val workers = 1
+            repeat(workers) {
+                jobs.add(launch {
+                    while (isActive) {
+                        val profile = queue.poll() ?: break
+                        profile.status = 0
+                        test.insert(profile)
+                        try {
+                            val result = io.nekohasekai.sagernet.bg.test.SpeedTestInstance(
+                                profile, pingUrl, downloadUrl, timeout, maxDuration
+                            ).use { it.doTest() }
+
+                            if (result.alive) {
+                                profile.status = 1
+                                profile.ping = result.pingMs
+                                profile.error = "${result.downloadMbps} Mb/s"
+                                // Append a speed marker + value to the name tag.
+                                val bean = profile.requireBean()
+                                val marker = when {
+                                    result.downloadMbps >= 50 -> "\u2728"
+                                    result.downloadMbps >= 25 -> "\u2B50"
+                                    result.downloadMbps >= 10 -> "\uD83C\uDFC1"
+                                    else -> "\uD83C\uDFF3\uFE0F"
+                                }
+                                val base = (bean.name ?: "")
+                                    .replace(Regex("^[\\x{2728}\\x{2B50}\\x{1F3C1}\\x{1F3F3}\\uFE0F]+\\s*"), "")
+                                bean.name = "$marker ${result.downloadMbps} $base".trim()
+                                profile.putBean(bean)
+                            } else {
+                                profile.status = 3
+                                profile.error = "Dead"
+                            }
+                        } catch (e: Exception) {
+                            profile.status = 3
+                            profile.error = e.readableMessage
+                        }
+                        onMainDispatcher {
+                            finished++
+                            test.binding.progressCircular.apply {
+                                isVisible = true
+                                setProgressCompat(
+                                    ((finished.toDouble() / profileCount.toDouble()) * 100).toInt(),
+                                    true
+                                )
+                            }
+                            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
+                                "$finished/$profileCount"
+                        }
+                        test.update(profile)
+                        ProfileManager.updateProfile(profile)
+                    }
+                })
+            }
+            jobs.joinAll()
+            test.close()
+            onMainDispatcher {
+                test.binding.progressCircular.isGone = true
+                dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setText(android.R.string.ok)
+                snackbar(getString(R.string.speed_test_done, profileCount)).show()
             }
         }
         test.cancel = {

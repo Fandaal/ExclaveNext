@@ -17,6 +17,7 @@ camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version = "1.6
 #noinspection SimilarGradleDependency
 camera-camera2 = { module = "androidx.camera:camera-camera2", version = "1.6.2" }
 swiperefreshlayout = { module = "androidx.swiperefreshlayout:swiperefreshlayout", version = "1.2.0" }
+documentfile = { module = "androidx.documentfile:documentfile", version = "1.0.1" }
 #noinspection SimilarGradleDependency
 appcompat = { module = "androidx.appcompat:appcompat", version = "1.8.0" }
 preference = { module = "androidx.preference:preference", version = "1.2.1" }
@@ -38,6 +39,7 @@ bouncycastle = { module = "org.bouncycastle:bcpkix-jdk18on", version = "1.86" }
 zxing-core = { module = "com.google.zxing:core", version = "3.5.4" }
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version = "4.36.2" }
 snakeyaml = { module = "org.yaml:snakeyaml", version = "2.7" }
+geoip2 = { module = "com.maxmind.geoip2:geoip2", version = "4.2.1" }
 material-about-library = { module = "com.github.daniel-stoneuk:material-about-library", version = "3.2.0-rc01" }
 process-phoenix = { module = "com.jakewharton:process-phoenix", version = "3.0.0" }
 kryo = { module = "com.esotericsoftware:kryo", version = "5.6.2" }

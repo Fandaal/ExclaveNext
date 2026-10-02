@@ -125,6 +125,10 @@
             "artifactVersion": "9.4.1"
         },
         {
+            "uniqueId": "androidx.documentfile:documentfile",
+            "artifactVersion": "1.0.1"
+        },
+        {
             "uniqueId": "androidx.drawerlayout:drawerlayout",
             "artifactVersion": "1.1.1"
         },
@@ -357,6 +361,22 @@
             "artifactVersion": "1.11.9"
         },
         {
+            "uniqueId": "com.fasterxml.jackson.core:jackson-annotations",
+            "artifactVersion": "2.17.2"
+        },
+        {
+            "uniqueId": "com.fasterxml.jackson.core:jackson-core",
+            "artifactVersion": "2.17.2"
+        },
+        {
+            "uniqueId": "com.fasterxml.jackson.core:jackson-databind",
+            "artifactVersion": "2.17.2"
+        },
+        {
+            "uniqueId": "com.fasterxml.jackson:jackson-bom",
+            "artifactVersion": "2.17.2"
+        },
+        {
             "uniqueId": "com.github.daniel-stoneuk:material-about-library",
             "artifactVersion": "3.2.0-rc01"
         },
@@ -415,6 +435,14 @@
         {
             "uniqueId": "com.jakewharton:process-phoenix",
             "artifactVersion": "3.0.0"
+        },
+        {
+            "uniqueId": "com.maxmind.db:maxmind-db",
+            "artifactVersion": "3.1.1"
+        },
+        {
+            "uniqueId": "com.maxmind.geoip2:geoip2",
+            "artifactVersion": "4.2.1"
         },
         {
             "uniqueId": "com.simplecityapps:recyclerview-fastscroll",

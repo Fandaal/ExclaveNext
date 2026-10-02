@@ -23,6 +23,9 @@
             <item
                 android:id="@+id/action_import_file"
                 android:title="@string/action_import_file" />
+            <item
+                android:id="@+id/action_import_folder"
+                android:title="@string/action_import_folder" />
             <item android:title="@string/add_profile_methods_manual_settings">
                 <menu>
                     <item
@@ -133,6 +136,12 @@
             <item
                 android:id="@+id/action_connection_test_delete_unavailable"
                 android:title="@string/connection_test_delete_unavailable" />
+            <item
+                android:id="@+id/action_annotate_geoip"
+                android:title="@string/action_annotate_geoip" />
+            <item
+                android:id="@+id/action_speed_test"
+                android:title="@string/action_speed_test" />
         </menu>
     </item>
     <item

@@ -22,6 +22,7 @@ package io.nekohasekai.sagernet
 const val CONNECTION_TEST_URL = "https://www.google.com/generate_204"
 const val CONNECTION_TEST_CONCURRENCY = 6
 const val CONNECTION_TEST_TIMEOUT = 5000
+const val CONNECTION_TEST_ROUNDS = 1
 
 object Key {
 
@@ -90,6 +91,7 @@ object Key {
     const val CONNECTION_TEST_URL = "connectionTestURL"
     const val CONNECTION_TEST_CONCURRENCY = "connectionTestConcurrency"
     const val CONNECTION_TEST_TIMEOUT = "connectionTestTimeout"
+    const val CONNECTION_TEST_ROUNDS = "connectionTestRounds"
     const val PROBE_URL = "probeUrl"
     const val PROBE_INTERVAL = "probeInterval"
 

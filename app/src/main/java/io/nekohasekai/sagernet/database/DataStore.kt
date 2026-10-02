@@ -274,6 +274,7 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var connectionTestURL by configurationStore.string(Key.CONNECTION_TEST_URL) { CONNECTION_TEST_URL }
     var connectionTestConcurrency by configurationStore.stringToIntIfExists(Key.CONNECTION_TEST_CONCURRENCY) { CONNECTION_TEST_CONCURRENCY }
     var connectionTestTimeout by configurationStore.stringToIntIfExists(Key.CONNECTION_TEST_TIMEOUT) { CONNECTION_TEST_TIMEOUT }
+    var connectionTestRounds by configurationStore.stringToIntIfExists(Key.CONNECTION_TEST_ROUNDS) { CONNECTION_TEST_ROUNDS }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
     var showGroupName by configurationStore.boolean(Key.SHOW_GROUP_NAME)
 
