@@ -31,6 +31,8 @@ import io.nekohasekai.sagernet.bg.GeoIpEntryType
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.databinding.LayoutGeoipProviderItemBinding
 import io.nekohasekai.sagernet.databinding.LayoutGeoipProviderListBinding
+import io.nekohasekai.sagernet.ktx.FixedLinearLayoutManager
+import io.nekohasekai.sagernet.ktx.dp2px
 
 class GeoIpProviderListActivity : ThemedActivity() {
 
@@ -41,9 +43,13 @@ class GeoIpProviderListActivity : ThemedActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setTitle(R.string.geoip_provider_chain)
         binding = LayoutGeoipProviderListBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // No LayoutManager = RecyclerView silently renders nothing. This was the
+        // "empty screen" bug: adapter and data were fine, the list just had no
+        // idea how to lay rows out.
+        binding.recyclerView.layoutManager = FixedLinearLayoutManager(binding.recyclerView)
 
         adapter = EntryAdapter()
         binding.recyclerView.adapter = adapter
@@ -51,13 +57,31 @@ class GeoIpProviderListActivity : ThemedActivity() {
         touchHelper = ItemTouchHelper(DragCallback())
         touchHelper.attachToRecyclerView(binding.recyclerView)
 
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.apply {
+            setTitle(R.string.geoip_provider_chain)
+            setDisplayHomeAsUpEnabled(true)
+            setHomeAsUpIndicator(R.drawable.ic_navigation_close)
+        }
+
+        adapter.reload()
+
         ViewCompat.setOnApplyWindowInsetsListener(binding.recyclerView) { view, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            view.updatePadding(bars.left, bars.top, bars.right, bars.bottom)
+            view.updatePadding(
+                left = bars.left + dp2px(4),
+                right = bars.right + dp2px(4),
+                bottom = bars.bottom + dp2px(4),
+            )
             insets
         }
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        finish()
+        return true
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {

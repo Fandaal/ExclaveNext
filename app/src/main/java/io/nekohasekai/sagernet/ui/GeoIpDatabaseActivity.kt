@@ -19,8 +19,11 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.nekohasekai.sagernet.R
@@ -30,6 +33,8 @@ import io.nekohasekai.sagernet.bg.GeoIpDefaults
 import io.nekohasekai.sagernet.bg.InstalledDatabase
 import io.nekohasekai.sagernet.databinding.LayoutGeoipDatabaseItemBinding
 import io.nekohasekai.sagernet.databinding.LayoutGeoipDatabaseListBinding
+import io.nekohasekai.sagernet.ktx.FixedLinearLayoutManager
+import io.nekohasekai.sagernet.ktx.dp2px
 import io.nekohasekai.sagernet.ktx.onMainDispatcher
 import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import java.text.DateFormat
@@ -46,12 +51,38 @@ class GeoIpDatabaseActivity : ThemedActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setTitle(R.string.geoip_local_databases)
         binding = LayoutGeoipDatabaseListBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Same as the provider list: no LayoutManager = blank screen.
+        binding.recyclerView.layoutManager = FixedLinearLayoutManager(binding.recyclerView)
+
         adapter = DatabaseAdapter()
         binding.recyclerView.adapter = adapter
+
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.apply {
+            setTitle(R.string.geoip_local_databases)
+            setDisplayHomeAsUpEnabled(true)
+            setHomeAsUpIndicator(R.drawable.ic_navigation_close)
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.recyclerView) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.updatePadding(
+                left = bars.left + dp2px(4),
+                right = bars.right + dp2px(4),
+                bottom = bars.bottom + dp2px(4),
+            )
+            insets
+        }
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        finish()
+        return true
     }
 
     override fun onResume() {

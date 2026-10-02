@@ -40,10 +40,22 @@ class GeoIpSettingsActivity(
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setTitle(R.string.geoip_settings)
+        // layout_config_settings ships a bare toolbar; without this the options
+        // menu (test lookup) never inflates.
+        setSupportActionBar(findViewById(R.id.toolbar))
+        supportActionBar?.apply {
+            setTitle(R.string.geoip_settings)
+            setDisplayHomeAsUpEnabled(true)
+        }
+
         supportFragmentManager.beginTransaction()
             .replace(R.id.settings, MyPreferenceFragmentCompat())
             .commit()
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        finish()
+        return true
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
