@@ -4,30 +4,31 @@
  *                                                                            *
  * Ported from the WhiteListVPN.py sorter:                                    *
  *   - resolve_domain_to_ip      -> resolveToIp                               *
- *   - get_country_by_ip         -> lookup (local MMDB first)                 *
- *   - get_asn_provider          -> aspProvider                              *
- *   - get_country_from_api      -> apiLookup (freeipapi + i.pn, breaker)     *
- *   - country_code_to_flag      -> codeToFlag                                *
+ *   - get_country_by_ip         -> lookup (walks the configured chain)       *
+ *   - get_asn_provider          -> MmdbAsnResolver / ApiResolver             *
+ *   - get_country_from_api      -> ApiResolver (freeipapi + i.pn, breaker)   *
+ *   - country_code_to_flag      -> codeToFlag (GeoIpResolvers.kt)             *
  *   - add_country_to_line       -> annotateName (writes into bean.name tag)  *
  *                                                                            *
- * The annotation is written ONLY into the profile display name after the     *
- * "#" style tag that the sorter uses, e.g.  "<orig> 🇩🇪 Germany (Hetzner)".   *
- * No new database columns are introduced.                                    *
+ * The lookup order is no longer hardcoded: DataStore.geoIpChain holds an     *
+ * ordered list of entries (local MaxMind databases and/or public APIs) and   *
+ * each one only fills the fields that are still missing. See GeoIpResolvers  *
+ * for the individual sources and GeoIpConfig for the chain model.            *
+ *                                                                            *
+ * The annotation is written ONLY into the profile display name. No new       *
+ * database columns are introduced.                                          *
  ******************************************************************************/
 
 package io.nekohasekai.sagernet.bg
 
 import com.maxmind.geoip2.DatabaseReader
 import io.nekohasekai.sagernet.SagerNet
+import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.ktx.Logs
-import org.json.JSONObject
 import java.io.File
 import java.net.Inet4Address
 import java.net.InetAddress
-import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.min
-import kotlin.math.pow
 
 /**
  * Annotation payload for a resolved server: flag + country + ISP/provider.
@@ -60,49 +61,25 @@ data class GeoInfo(
 object GeoIpAnnotator {
 
     // MMDB file names, searched inside externalAssets (same dir as geoip.dat).
-    private const val COUNTRY_DB = "GeoLite2-Country.mmdb"
-    private const val ASN_DB = "GeoLite2-ASN.mmdb"
+    private const val COUNTRY_DB = GeoIpDefaults.COUNTRY_DB
+    private const val ASN_DB = GeoIpDefaults.ASN_DB
 
     // P3TERX mirror — same URLs the Python sorter uses (GEOIP_URLS).
-    const val COUNTRY_DB_URL =
-        "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb"
-    const val ASN_DB_URL =
-        "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
-
-    // Public fallback APIs ({ip} placeholder). ipwho.is and i.pn return BOTH
-    // country and ISP; freeipapi returns country + asnOrganization.
-    private val API_SERVICES = arrayOf(
-        "https://ipwho.is/{ip}",
-        "https://i.pn/json/{ip}",
-        "https://freeipapi.com/api/json/{ip}",
-    )
-    private const val REQUEST_TIMEOUT_MS = 6000
-    private const val CIRCUIT_THRESHOLD = 10
-    private const val CIRCUIT_TIMEOUT_MS = 60_000L
-    private const val MAX_BACKOFF_MS = 30_000.0
-
-    // Words skipped when they lead the ASN org string (lower-case).
-    private val IGNORE_ASN_WORDS = setOf("the", "llc", "inc", "ltd", "ooo", "jsc")
+    const val COUNTRY_DB_URL = GeoIpDefaults.COUNTRY_DB_URL
+    const val ASN_DB_URL = GeoIpDefaults.ASN_DB_URL
 
     private val dnsCache = ConcurrentHashMap<String, String>()      // host -> ip ("" = failed)
     private val geoCache = ConcurrentHashMap<String, GeoInfo>()     // ip -> GeoInfo
-    private val notFound = ConcurrentHashMap<String, Boolean>()     // ip not in local db & api
 
     @Volatile private var countryReader: DatabaseReader? = null
     @Volatile private var asnReader: DatabaseReader? = null
     @Volatile private var initialized = false
 
-    private class ApiState {
-        @Volatile var consecutiveErrors = 0
-        @Volatile var circuitOpenUntil = 0L
-        @Volatile var lastCall = 0L
-    }
-    private val apiState = API_SERVICES.associateWith { ApiState() }
-
     fun countryDbFile(): File = File(SagerNet.application.externalAssets, COUNTRY_DB)
     fun asnDbFile(): File = File(SagerNet.application.externalAssets, ASN_DB)
 
-    fun hasLocalDatabases(): Boolean = countryDbFile().isFile
+    /** True when at least one chain entry can actually answer. */
+    fun isChainUsable(): Boolean = DataStore.geoIpChain.any { it.enabled }
 
     /** Opens the MMDB readers once. Safe to call repeatedly. */
     @Synchronized
@@ -178,169 +155,32 @@ object GeoIpAnnotator {
         }
     }
 
-    /** ISO country code -> flag emoji (regional indicators). */
-    private fun codeToFlag(code: String): String {
-        if (code.length != 2) return ""
-        return try {
-            buildString {
-                for (c in code.uppercase()) {
-                    appendCodePoint(0x1F1E6 + (c.code - 'A'.code))
-                }
-            }
-        } catch (_: Exception) {
-            ""
-        }
+    /**
+     * Build the resolver for one chain entry, or null when the entry cannot
+     * work: a local database that is not installed, or an API with no URL.
+     */
+    private fun resolverFor(entry: GeoIpEntry): GeoIpResolver? = when (entry.type) {
+        GeoIpEntryType.MMDB_COUNTRY -> countryReader?.let { MmdbCountryResolver(it) }
+        GeoIpEntryType.MMDB_ASN -> asnReader?.let { MmdbAsnResolver(it) }
+        GeoIpEntryType.API -> if (entry.url.isBlank()) null else ApiResolver(entry.url)
+        else -> null
     }
 
-    private fun asnProvider(ip: String): String {
-        val reader = asnReader ?: return ""
-        return try {
-            val org = reader.asn(InetAddress.getByName(ip)).autonomousSystemOrganization
-                ?: return ""
-            val words = org.split(Regex("[^A-Za-z0-9.-]")).filter { it.isNotBlank() }
-            when {
-                words.isEmpty() -> ""
-                words[0].lowercase() in IGNORE_ASN_WORDS && words.size > 1 -> words[1]
-                else -> words[0]
-            }
-        } catch (_: Exception) {
-            ""
-        }
-    }
-
-    /** IP -> GeoInfo. Local MMDB first, then the API fallback. Cached. */
+    /**
+     * IP -> GeoInfo, resolved through the configured provider chain.
+     *
+     * Entries are consulted in order and each one only fills what is still
+     * missing, so a local country database plus a later API still yields both
+     * fields. Iteration stops as soon as the country AND the provider are known.
+     * Cached, so a repeated profile costs nothing.
+     */
     fun lookup(ip: String): GeoInfo {
         geoCache[ip]?.let { return it }
         ensureInit()
 
-        var provider = asnProvider(ip)   // local ASN MMDB (may be empty)
-        var flag = ""
-        var country = "Unknown"
-
-        countryReader?.let { reader ->
-            try {
-                val resp = reader.country(InetAddress.getByName(ip))
-                resp.country.name?.let {
-                    country = it
-                    flag = codeToFlag(resp.country.isoCode ?: "")
-                }
-            } catch (e: com.maxmind.geoip2.exception.AddressNotFoundException) {
-                notFound[ip] = true
-            } catch (e: Exception) {
-                Logs.w("GeoIP lookup: ${e.message}")
-            }
-        }
-
-        // Hit the API when EITHER country or provider is still missing (local
-        // ASN db is often absent, so provider frequently needs the API too).
-        if ((country == "Unknown" && notFound[ip] != true) || provider.isBlank()) {
-            val api = apiLookup(ip)
-            if (api.country != "Unknown") {
-                if (country == "Unknown") {
-                    flag = api.flag
-                    country = api.country
-                }
-            } else if (country == "Unknown") {
-                notFound[ip] = true
-            }
-            if (provider.isBlank() && api.provider.isNotBlank()) {
-                provider = api.provider
-            }
-        }
-
-        val result = GeoInfo(flag, country, provider)
+        val result = GeoIpChainResolver.resolve(ip, DataStore.geoIpChain) { resolverFor(it) }
         geoCache[ip] = result
         return result
-    }
-
-    private fun backoffDelay(consecutiveErrors: Int): Double {
-        val base = if (consecutiveErrors == 0) 500.0
-        else min(500.0 * 2.0.pow(consecutiveErrors), MAX_BACKOFF_MS)
-        return base * (0.8 + Math.random() * 0.4)
-    }
-
-    /** Shorten an ISP/org string the same way asnProvider trims an ASN org. */
-    private fun shortenProvider(org: String): String {
-        val words = org.split(Regex("[^A-Za-z0-9.-]")).filter { it.isNotBlank() }
-        return when {
-            words.isEmpty() -> ""
-            words[0].lowercase() in IGNORE_ASN_WORDS && words.size > 1 -> words[1]
-            else -> words[0]
-        }
-    }
-
-    /** Pull an ISP/provider name out of whatever shape the API returned. */
-    private fun providerFromJson(json: JSONObject): String {
-        // ipwho.is nests it under "connection".
-        json.optJSONObject("connection")?.let { conn ->
-            val v = conn.optString("isp", conn.optString("org", ""))
-            if (v.isNotBlank()) return shortenProvider(v)
-        }
-        // i.pn: isp/org/asName ; freeipapi: asnOrganization.
-        for (key in arrayOf("isp", "asName", "org", "asnOrganization")) {
-            val v = json.optString(key, "")
-            if (v.isNotBlank()) return shortenProvider(v)
-        }
-        return ""
-    }
-
-    /** GeoInfo from public APIs, or UNKNOWN. Ports get_country_from_api (+ ISP). */
-    private fun apiLookup(ip: String): GeoInfo {
-        for (apiUrl in API_SERVICES) {
-            val state = apiState[apiUrl]!!
-            val now = System.currentTimeMillis()
-            if (now < state.circuitOpenUntil) continue
-
-            val delay = backoffDelay(state.consecutiveErrors)
-            val elapsed = (now - state.lastCall).toDouble()
-            if (elapsed < delay) {
-                try {
-                    Thread.sleep((delay - elapsed).toLong())
-                } catch (_: InterruptedException) {
-                }
-            }
-
-            try {
-                val conn = URL(apiUrl.replace("{ip}", ip)).openConnection()
-                    as java.net.HttpURLConnection
-                conn.connectTimeout = REQUEST_TIMEOUT_MS
-                conn.readTimeout = REQUEST_TIMEOUT_MS
-                conn.instanceFollowRedirects = true   // freeipapi 307-redirects
-                conn.setRequestProperty("User-Agent", "Exclave")
-                try {
-                    val code = conn.responseCode
-                    if (code == 429) {
-                        state.consecutiveErrors++
-                        continue
-                    }
-                    if (code in 200..299) {
-                        val body = conn.inputStream.bufferedReader().use { it.readText() }
-                        val json = JSONObject(body)
-                        val country = json.optString("countryName",
-                            json.optString("country", "Unknown"))
-                        val cc = json.optString("countryCode",
-                            json.optString("country_code", ""))
-                        val provider = providerFromJson(json)
-                        if (country.isNotEmpty() && country != "Unknown") {
-                            state.consecutiveErrors = maxOf(0, state.consecutiveErrors - 1)
-                            state.lastCall = System.currentTimeMillis()
-                            return GeoInfo(codeToFlag(cc), country, provider)
-                        }
-                    }
-                } finally {
-                    conn.disconnect()
-                }
-            } catch (_: Exception) {
-            }
-
-            state.consecutiveErrors++
-            state.lastCall = System.currentTimeMillis()
-            if (state.consecutiveErrors >= CIRCUIT_THRESHOLD) {
-                state.circuitOpenUntil = System.currentTimeMillis() + CIRCUIT_TIMEOUT_MS
-                Logs.w("GeoIP circuit breaker open for $apiUrl")
-            }
-        }
-        return GeoInfo.UNKNOWN
     }
 
 /**

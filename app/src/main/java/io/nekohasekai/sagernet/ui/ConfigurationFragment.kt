@@ -1075,7 +1075,7 @@ class ConfigurationFragment @JvmOverloads constructor(
         val dialog = test.builder.show()
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
 
-        if (!io.nekohasekai.sagernet.bg.GeoIpAnnotator.hasLocalDatabases()) {
+        if (!io.nekohasekai.sagernet.bg.GeoIpAnnotator.isChainUsable()) {
             snackbar(getString(R.string.geoip_db_missing)).show()
         }
 

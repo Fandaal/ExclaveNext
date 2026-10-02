@@ -132,6 +132,9 @@ object Key {
     const val GRPC_SERVICE_NAME_COMPAT = "grpcServiceNameCompat"
     const val PROFILE_SECURITY_ADVISORY = "profileSecurityAdvisory"
 
+    // Exclave Next: the whole GeoIP provider chain, serialised as JSON.
+    const val GEOIP_CONFIG = "geoIpConfig"
+
     const val APP_TRAFFIC_STATISTICS = "appTrafficStatistics"
     const val PROFILE_TRAFFIC_STATISTICS = "profileTrafficStatistics"
 

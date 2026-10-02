@@ -174,6 +174,17 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var rulesProvider by configurationStore.stringToInt(Key.RULES_PROVIDER)
     var rulesGeositeUrl by configurationStore.string(Key.RULES_GEOSITE_URL) { "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat" }
     var rulesGeoipUrl by configurationStore.string(Key.RULES_GEOIP_URL) { "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat" }
+
+    // Exclave Next: GeoIP provider chain (ordered, fallback semantics).
+    var geoIpConfigJson by configurationStore.string(Key.GEOIP_CONFIG)
+
+    /** The configured GeoIP chain; an absent or corrupt value yields the defaults. */
+    val geoIpChain: List<io.nekohasekai.sagernet.bg.GeoIpEntry>
+        get() = io.nekohasekai.sagernet.bg.parseChainJson(geoIpConfigJson)
+
+    fun setGeoIpChain(chain: List<io.nekohasekai.sagernet.bg.GeoIpEntry>) {
+        geoIpConfigJson = io.nekohasekai.sagernet.bg.toChainJson(chain)
+    }
     var logLevel by configurationStore.stringToInt(Key.LOG_LEVEL) { 2 }
     var logLevelDebugWarningDisable by configurationStore.boolean(Key.LOG_LEVEL_DEBUG_WARNING_DISABLE)
     var enableDebug by configurationStore.boolean(Key.ENABLE_DEBUG) { BuildConfig.DEBUG }
