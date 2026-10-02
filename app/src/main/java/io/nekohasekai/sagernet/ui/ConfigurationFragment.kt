@@ -1198,16 +1198,18 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 profile.status = 1
                                 profile.ping = result.pingMs
                                 profile.error = "${result.downloadMbps} Mb/s"
-                                // Append a speed marker + value to the name tag.
+// Replace (never append) the speed marker + value in the name tag.
+                                // Uses the canonical SPEED_MARKER_REGEX from GeoIpAnnotator so
+                                // re-runs overwrite the previous value instead of stacking numbers.
                                 val bean = profile.requireBean()
                                 val marker = when {
                                     result.downloadMbps >= 50 -> "\u2728"
-                                    result.downloadMbps >= 25 -> "\u2B50"
+                                    result.downloadMbps >= 25 -> "\u2B50\uFE0F"
                                     result.downloadMbps >= 10 -> "\uD83C\uDFC1"
                                     else -> "\uD83C\uDFF3\uFE0F"
                                 }
-                                val base = (bean.name ?: "")
-                                    .replace(Regex("^[\\x{2728}\\x{2B50}\\x{1F3C1}\\x{1F3F3}\\uFE0F]+\\s*"), "")
+                                val base = io.nekohasekai.sagernet.bg.GeoIpAnnotator
+                                    .stripSpeedMarker(bean.name ?: "")
                                 bean.name = "$marker ${result.downloadMbps} $base".trim()
                                 profile.putBean(bean)
                             } else {

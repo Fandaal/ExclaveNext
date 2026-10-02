@@ -343,25 +343,63 @@ object GeoIpAnnotator {
         return GeoInfo.UNKNOWN
     }
 
-    // Matches the leading flag(regional-indicator pair) + "country (provider)" suffix.
-    private val GEO_TAG_REGEX = Regex(
-        "\\s*[\\x{1F1E6}-\\x{1F1FF}]{2}\\s+[^#]*\\([^)]*\\)\\s*$"
-    )
+/**
+     * Find the index of the first country-flag emoji (regional indicator symbol)
+     * in [name]. Country flags are pairs of regional indicators U+1F1E6..U+1F1FF.
+     * Returns -1 if none found. Uses codePoint iteration to correctly handle
+     * supplementary-plane characters on JVM (where they are surrogate pairs).
+     */
+    private fun findFirstFlagIndex(name: String): Int {
+        var i = 0
+        while (i < name.length) {
+            val cp = name.codePointAt(i)
+            if (cp in 0x1F1E6..0x1F1FF) return i
+            i += Character.charCount(cp)
+        }
+        return -1
+    }
 
-    /** Strip a previously-appended geo tag so re-annotation doesn't stack suffixes. */
-    fun stripGeoTag(name: String): String = name.replace(GEO_TAG_REGEX, "").trimEnd()
+    /** Strip everything from the first country-flag emoji to end-of-string. */
+    fun stripGeoTag(name: String): String {
+        val idx = findFirstFlagIndex(name)
+        return if (idx >= 0) name.substring(0, idx).trimEnd() else name
+    }
 
-    /** Return the trailing geo tag (incl. leading whitespace) of [name], or "". */
-    fun geoTagOf(name: String): String = GEO_TAG_REGEX.find(name)?.value ?: ""
+    /** Return the geo-tag tail starting at the first flag, or "". */
+    fun geoTagOf(name: String): String {
+        val idx = findFirstFlagIndex(name)
+        return if (idx >= 0) name.substring(idx) else ""
+    }
 
-    // Leading speed marker (emoji) + Mbps number written by the speed test, e.g.
-    // "✨ 42.3 <name>". Kept in sync with ConfigurationFragment.speedTest().
+// Leading speed marker written by speedTest(): exactly one of the five
+    // allowed emoji ✨ ⭐️ 🏁 🏳️ 🏴, optionally followed by one or more numeric
+    // Mbps values (the repetition also heals legacy names where several values
+    // stacked, e.g. "🏁 24.7 23.9 24.0 0.0 <name>"). Written as an alternation,
+    // NOT a character class: Java regex classes match UTF-16 code units and
+    // break on supplementary-plane emoji, while \x{...} outside a class matches
+    // full code points. ⭐️/🏳️ may carry U+FE0F; 🏴 may carry the ZWJ pirate
+    // flag tail. A bare allowed emoji with no number is still stripped (dead
+    // proxy marker "🏴 <name>") — anything that is not one of these five emoji
+    // (e.g. a ⚡ belonging to the subscription name) is never touched.
+    private const val SPEED_EMOJI =
+        "(?:\\x{2728}|\\x{2B50}\\uFE0F?|\\x{1F3C1}|\\x{1F3F3}\\uFE0F|\\x{1F3F4}(?:\\u200D\\x{2620}\\uFE0F)?)"
     private val SPEED_MARKER_REGEX = Regex(
-        "^[\\x{2728}\\x{2B50}\\x{1F3C1}\\x{1F3F3}\\uFE0F]+\\s*[0-9]+(?:\\.[0-9]+)?\\s+"
+        "^$SPEED_EMOJI(?:\\s+[0-9]+(?:\\.[0-9]+)?)*\\s+"
     )
 
-    /** Return the leading speed marker of [name], or "". */
-    fun speedMarkerOf(name: String): String = SPEED_MARKER_REGEX.find(name)?.value ?: ""
+    /**
+     * Return the leading speed marker of [name] normalised to at most ONE
+     * numeric value — "✨ 42.3 " — or just the emoji "🏴 " when no value is
+     * present. Legacy names with stacked values ("🏁 24.7 23.9 24.0") collapse
+     * to their first value so re-annotation heals them instead of propagating
+     * the pile.
+     */
+    fun speedMarkerOf(name: String): String {
+        val matched = SPEED_MARKER_REGEX.find(name)?.value ?: return ""
+        val head = matched.takeWhile { c -> !c.isDigit() && c != '.' }  // emoji + spaces
+        val num = Regex("[0-9]+(?:\\.[0-9]+)?").find(matched)?.value
+        return if (num != null) head.trimEnd() + " $num " else head
+    }
 
     /** Strip the leading speed marker from [name]. */
     fun stripSpeedMarker(name: String): String = name.replace(SPEED_MARKER_REGEX, "")
@@ -382,9 +420,8 @@ object GeoIpAnnotator {
         return base
     }
 
-    /** Append (or replace) the geo tag inside the profile display name. */
+        /** Replace the entire profile name with just the geo tag. */
     fun annotateName(originalName: String, info: GeoInfo): String {
-        val base = stripGeoTag(originalName)
-        return if (info.isKnown) "$base ${info.tag()}".trim() else base
+        return if (info.isKnown) info.tag() else stripGeoTag(originalName).trimEnd()
     }
 }
