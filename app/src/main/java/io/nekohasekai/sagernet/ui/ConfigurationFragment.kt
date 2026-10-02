@@ -1203,6 +1203,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 // re-runs overwrite the previous value instead of stacking numbers.
                                 val bean = profile.requireBean()
                                 val marker = when {
+                                    // Ping passed but no bytes moved: black flag with an explicit 0.0
+                                    result.downloadMbps <= 0.0 -> "\uD83C\uDFF4"
                                     result.downloadMbps >= 50 -> "\u2728"
                                     result.downloadMbps >= 25 -> "\u2B50\uFE0F"
                                     result.downloadMbps >= 10 -> "\uD83C\uDFC1"
@@ -1215,6 +1217,12 @@ class ConfigurationFragment @JvmOverloads constructor(
                             } else {
                                 profile.status = 3
                                 profile.error = "Dead"
+                                // Ping never passed: black flag WITHOUT a number.
+                                val bean = profile.requireBean()
+                                val base = io.nekohasekai.sagernet.bg.GeoIpAnnotator
+                                    .stripSpeedMarker(bean.name ?: "")
+                                bean.name = "\uD83C\uDFF4 $base".trim()
+                                profile.putBean(bean)
                             }
                         } catch (e: Exception) {
                             profile.status = 3
