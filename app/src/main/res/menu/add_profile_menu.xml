@@ -118,6 +118,11 @@
         </menu>
     </item>
     <item
+        android:id="@+id/action_selection_mode"
+        android:icon="@drawable/ic_baseline_view_list_24"
+        android:title="@string/action_selection_mode"
+        app:showAsAction="ifRoom" />
+    <item
         android:id="@+id/action_clear_traffic_statistics"
         android:title="@string/clear_traffic_statistics" />
     <item

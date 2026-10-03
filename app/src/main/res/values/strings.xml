@@ -705,4 +705,16 @@
     <string name="geoip_no_placeholder">The URL must contain {ip}</string>
     <string name="geoip_bad_url">Not a valid URL</string>
     <string name="geoip_disabled_suffix">(disabled)</string>
+    <!-- Exclave Next: multi-select of configs in a group -->
+    <string name="action_select_all">Select all</string>
+    <string name="action_select_none">Clear selection</string>
+    <string name="action_selection_mode">Select profiles</string>
+    <plurals name="selected_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <string name="action_selection_share">Share links</string>
+    <string name="selection_shared">%d links copied</string>
+    <string name="selection_matched">%d found</string>
+    <string name="cancel">Cancel</string>
 </resources>

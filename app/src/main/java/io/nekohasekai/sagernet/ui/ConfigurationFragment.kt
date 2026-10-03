@@ -104,6 +104,10 @@ class ConfigurationFragment @JvmOverloads constructor(
         override fun handleOnBackPressed() {
             searchView?.onActionViewCollapsed()
             searchView?.clearFocus()
+            // The query survives onActionViewCollapsed(), so clear it here —
+            // otherwise the fragment would keep showing the filtered bar with
+            // no search field visible to explain it.
+            searchView?.setQuery("", false)
         }
     }
 
@@ -173,6 +177,10 @@ class ConfigurationFragment @JvmOverloads constructor(
                     try {
                         val fragment = (childFragmentManager.findFragmentByTag("f" + selectedGroup.id) as GroupFragment?)
                         fragment?.adapter?.filter(query)
+                        // Tell the fragment about the query too: it keeps its
+                        // own bar in sync, which is the only bulk-action entry
+                        // point while the search field owns the toolbar.
+                        fragment?.onSearchFilterChanged(query)
                     } catch (_: Exception) {}
                 }
                 return false
@@ -204,6 +212,7 @@ class ConfigurationFragment @JvmOverloads constructor(
             override fun onTabUnselected(tab: TabLayout.Tab) {
                 val fragment = (childFragmentManager.findFragmentByTag("f" + selectedGroup.id) as GroupFragment?)
                 fragment?.adapter?.filter("")
+                fragment?.onSearchFilterChanged("")
             }
 
             override fun onTabReselected(tab: TabLayout.Tab) {}
@@ -270,6 +279,27 @@ class ConfigurationFragment @JvmOverloads constructor(
         }
 
         (requireActivity() as? MainActivity)?.onBackPressedCallback?.isEnabled = false
+
+        // Back should leave selection mode before it leaves the screen. Added
+        // after the search callback, so a focused search field still collapses
+        // first (callbacks fire in reverse registration order).
+        (requireActivity() as? MainActivity)?.onBackPressedDispatcher?.addCallback(
+            viewLifecycleOwner,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    val fragment = (childFragmentManager.findFragmentByTag(
+                        "f" + selectedGroup.id
+                    ) as? GroupFragment)
+                    if (fragment != null && fragment.hasCheckedProfiles()) {
+                        fragment.exitSelectionMode()
+                    } else {
+                        isEnabled = false
+                        (requireActivity() as? MainActivity)?.onBackPressedDispatcher
+                            ?.onBackPressed()
+                    }
+                }
+            }
+        )
     }
 
     override fun onDestroy() {
@@ -648,137 +678,35 @@ class ConfigurationFragment @JvmOverloads constructor(
             R.id.action_new_balancer -> {
                 startActivity(Intent(requireActivity(), BalancerSettingsActivity::class.java))
             }
+            R.id.action_selection_mode -> {
+                // Enter selection mode from the toolbar. Checks the topmost
+                // visible row so the user starts where they were looking; the
+                // full rebind also swaps rows over to the toggle click handler.
+                if (select) return true
+                val fragment = childFragmentManager.findFragmentByTag(
+                    "f" + selectedGroup.id
+                ) as? GroupFragment
+                fragment?.adapter?.checkFirstVisible()
+                fragment?.updateSelectionBar()
+            }
             R.id.action_clear_traffic_statistics -> {
                 runOnDefaultDispatcher {
-                    val profiles = SagerDatabase.proxyDao.getByGroup(DataStore.currentGroupId())
-                    val toClear = mutableListOf<ProxyEntity>()
-                    if (profiles.isNotEmpty()) for (profile in profiles) {
-                        if (profile.tx != 0L || profile.rx != 0L) {
-                            profile.tx = 0
-                            profile.rx = 0
-                            toClear.add(profile)
-                        }
-                    }
-                    if (toClear.isNotEmpty()) {
-                        ProfileManager.updateProfile(toClear)
-                    }
+                    clearTraffic(SagerDatabase.proxyDao.getByGroup(DataStore.currentGroupId()))
                 }
             }
             R.id.action_connection_test_clear_results -> {
                 runOnDefaultDispatcher {
-                    val profiles = SagerDatabase.proxyDao.getByGroup(DataStore.currentGroupId())
-                    val toClear = mutableListOf<ProxyEntity>()
-                    if (profiles.isNotEmpty()) for (profile in profiles) {
-                        if (profile.status != 0) {
-                            profile.status = 0
-                            profile.ping = 0
-                            profile.error = null
-                            toClear.add(profile)
-                        }
-                    }
-                    if (toClear.isNotEmpty()) {
-                        ProfileManager.updateProfile(toClear)
-                    }
+                    clearTestResults(SagerDatabase.proxyDao.getByGroup(DataStore.currentGroupId()))
                 }
             }
             R.id.action_remove_duplicate -> {
                 runOnDefaultDispatcher {
-                    val profiles = SagerDatabase.proxyDao.getByGroup(DataStore.currentGroupId())
-                    val toClear = mutableListOf<ProxyEntity>()
-                    val uniqueProxies = LinkedHashSet<Protocols.Deduplication>()
-                    for (p in profiles) {
-                        val proxy = Protocols.Deduplication(p.requireBean(), p.displayType())
-                        if (!uniqueProxies.add(proxy)) {
-                            toClear += p
-                        }
-                    }
-                    if (toClear.isNotEmpty()) {
-                        onMainDispatcher {
-                            MaterialAlertDialogBuilder(requireContext()).setTitle(R.string.confirm)
-                                .setMessage(
-                                    getString(R.string.delete_multi_confirm_prompt) + "\n" +
-                                            toClear.mapIndexedNotNull { index, proxyEntity ->
-                                                if (index < 20) {
-                                                    proxyEntity.displayName()
-                                                } else if (index == 20) {
-                                                    "......"
-                                                } else {
-                                                    null
-                                                }
-                                            }.joinToString("\n")
-                                )
-                                .setPositiveButton(android.R.string.ok) { _, _ ->
-                                    for (profile in toClear) {
-                                        adapter.groupFragments[DataStore.selectedGroup]?.adapter?.apply {
-                                            val index = configurationIdList.indexOf(profile.id)
-                                            if (index >= 0) {
-                                                configurationIdList.removeAt(index)
-                                                configurationList.remove(profile.id)
-                                                notifyItemRemoved(index)
-                                            }
-                                        }
-                                    }
-                                    runOnDefaultDispatcher {
-                                        for (profile in toClear) {
-                                            ProfileManager.deleteProfile2(
-                                                profile.groupId, profile.id
-                                            )
-                                        }
-                                    }
-                                }
-                                .setNegativeButton(android.R.string.cancel, null)
-                                .show()
-                        }
-                    }
+                    deduplicate(SagerDatabase.proxyDao.getByGroup(DataStore.currentGroupId()))
                 }
             }
             R.id.action_connection_test_delete_unavailable -> {
                 runOnDefaultDispatcher {
-                    val profiles = SagerDatabase.proxyDao.getByGroup(DataStore.currentGroupId())
-                    val toClear = mutableListOf<ProxyEntity>()
-                    if (profiles.isNotEmpty()) for (profile in profiles) {
-                        if (profile.status != -1 && profile.status != 0 && profile.status != 1) {
-                            toClear.add(profile)
-                        }
-                    }
-                    if (toClear.isNotEmpty()) {
-                        onMainDispatcher {
-                            MaterialAlertDialogBuilder(requireContext()).setTitle(R.string.confirm)
-                                .setMessage(
-                                    getString(R.string.delete_multi_confirm_prompt) + "\n" +
-                                            toClear.mapIndexedNotNull { index, proxyEntity ->
-                                                if (index < 20) {
-                                                    proxyEntity.displayName()
-                                                } else if (index == 20) {
-                                                    "......"
-                                                } else {
-                                                    null
-                                                }
-                                            }.joinToString("\n")
-                                )
-                                .setPositiveButton(android.R.string.ok) { _, _ ->
-                                    for (profile in toClear) {
-                                        adapter.groupFragments[DataStore.selectedGroup]?.adapter?.apply {
-                                            val index = configurationIdList.indexOf(profile.id)
-                                            if (index >= 0) {
-                                                configurationIdList.removeAt(index)
-                                                configurationList.remove(profile.id)
-                                                notifyItemRemoved(index)
-                                            }
-                                        }
-                                    }
-                                    runOnDefaultDispatcher {
-                                        for (profile in toClear) {
-                                            ProfileManager.deleteProfile2(
-                                                profile.groupId, profile.id
-                                            )
-                                        }
-                                    }
-                                }
-                                .setNegativeButton(android.R.string.cancel, null)
-                                .show()
-                        }
-                    }
+                    deleteUnavailable(SagerDatabase.proxyDao.getByGroup(DataStore.currentGroupId()))
                 }
             }
             R.id.action_connection_url_test -> {
@@ -802,6 +730,142 @@ class ConfigurationFragment @JvmOverloads constructor(
             }
         }
         return true
+    }
+
+    // --- Exclave Next: bulk operations over an explicit profile set ---------
+    // Each of these was inlined in the menu handler before; they are extracted
+    // so that the group-wide toolbar entries and the selection-mode entries
+    // run the exact same code over different target sets. All four are
+    // `suspend`-friendly: callers run them on the default dispatcher.
+
+    /** Zero the traffic counters of the given profiles. */
+    suspend fun clearTraffic(profiles: List<ProxyEntity>) {
+        val toClear = profiles.filter { it.tx != 0L || it.rx != 0L }
+        toClear.forEach {
+            it.tx = 0
+            it.rx = 0
+        }
+        if (toClear.isNotEmpty()) ProfileManager.updateProfile(toClear)
+    }
+
+    /** Reset the URL-test verdict of the given profiles. */
+    suspend fun clearTestResults(profiles: List<ProxyEntity>) {
+        val toClear = profiles.filter { it.status != 0 }
+        toClear.forEach {
+            it.status = 0
+            it.ping = 0
+            it.error = null
+        }
+        if (toClear.isNotEmpty()) ProfileManager.updateProfile(toClear)
+    }
+
+    /** Profiles that failed the URL test (status 3 / 2), i.e. everything the
+     *  app does not consider alive or untested. Mirrors the original rule:
+     *  status -1 (plugin missing), 0 (untested) and 1 (alive) are kept. */
+    private fun unavailableIn(profiles: List<ProxyEntity>): List<ProxyEntity> =
+        profiles.filter { it.status != -1 && it.status != 0 && it.status != 1 }
+
+    /** Second and later occurrences of the same server within `profiles`. */
+    private fun duplicatesIn(profiles: List<ProxyEntity>): List<ProxyEntity> {
+        val seen = LinkedHashSet<Protocols.Deduplication>()
+        val dup = mutableListOf<ProxyEntity>()
+        for (p in profiles) {
+            if (!seen.add(Protocols.Deduplication(p.requireBean(), p.displayType()))) {
+                dup += p
+            }
+        }
+        return dup
+    }
+
+    /** "Are you sure you want to remove these profiles?" + up to 20 names —
+     *  the same cap the original group-wide deletes used. */
+    private fun deleteConfirmMessage(profiles: List<ProxyEntity>): String {
+        return getString(R.string.delete_multi_confirm_prompt) + "\n" +
+                profiles.mapIndexedNotNull { index, profile ->
+                    when {
+                        index < 20 -> profile.displayName()
+                        index == 20 -> "......"
+                        else -> null
+                    }
+                }.joinToString("\n")
+    }
+
+    /** Confirm, then delete. The rows are pulled out of the visible list first
+     *  so the UI updates immediately, and only then deleted in the database.
+     *  `onConfirmed` runs when the user accepts — not before — so a cancelled
+     *  dialog leaves the selection exactly as it was. */
+    suspend fun deleteProfiles(
+        profiles: List<ProxyEntity>,
+        onConfirmed: (() -> Unit)? = null,
+    ) {
+        if (profiles.isEmpty()) return
+        onMainDispatcher {
+            MaterialAlertDialogBuilder(requireContext()).setTitle(R.string.confirm)
+                .setMessage(deleteConfirmMessage(profiles))
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    for (profile in profiles) {
+                        adapter.groupFragments[DataStore.selectedGroup]?.adapter?.apply {
+                            val index = configurationIdList.indexOf(profile.id)
+                            if (index >= 0) {
+                                configurationIdList.removeAt(index)
+                                configurationList.remove(profile.id)
+                                notifyItemRemoved(index)
+                            }
+                        }
+                    }
+                    onConfirmed?.invoke()
+                    runOnDefaultDispatcher {
+                        for (profile in profiles) {
+                            ProfileManager.deleteProfile2(profile.groupId, profile.id)
+                        }
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+    }
+
+    suspend fun deleteUnavailable(profiles: List<ProxyEntity>) {
+        deleteProfiles(unavailableIn(profiles))
+    }
+
+    suspend fun deduplicate(profiles: List<ProxyEntity>) {
+        deleteProfiles(duplicatesIn(profiles))
+    }
+
+    /** Copy the share links of the given profiles to the clipboard as one
+     *  newline-separated block — the same shape RawUpdater.parseRaw accepts, so
+     *  a copied selection can be pasted straight back in.
+     *  Profiles that cannot be expressed as a link (custom config, chain,
+     *  balancer, and the types without a share link) are skipped rather than
+     *  silently producing a broken entry. */
+    fun shareLinks(profiles: List<ProxyEntity>) {
+        val links = mutableListOf<String>()
+        for (profile in profiles) {
+            val link = try {
+                if (profile.wgBean != null) {
+                    profile.wgBean?.toConf()
+                } else if (profile.hasShareLink()) {
+                    profile.toLink()
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                Logs.w(e)
+                null
+            }
+            if (!link.isNullOrBlank()) links += link
+        }
+        if (links.isEmpty()) {
+            snackbar(getString(R.string.action_export_err))
+            return
+        }
+        val success = SagerNet.trySetPrimaryClip(links.joinToString("\n"))
+        if (success) {
+            snackbar(getString(R.string.selection_shared, links.size))
+        } else {
+            snackbar(getString(R.string.action_export_err))
+        }
     }
 
     // Multi-round counter. Two different denominators are in play, so both are shown
@@ -995,7 +1059,12 @@ class ConfigurationFragment @JvmOverloads constructor(
     }
 
     @Suppress("EXPERIMENTAL_API_USAGE")
-    fun urlTest() {
+    /** URL test.
+     *  Without arguments it tests the whole current group (the toolbar entry
+     *  point). With an explicit list it tests exactly those profiles — that is
+     *  the selection-mode path, so a checked subset (or a search-filtered set)
+     *  is what gets probed instead of the whole group. */
+    fun urlTest(targets: List<ProxyEntity>? = null) {
         val test = TestDialog()
         val dialog = test.builder.show()
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
@@ -1003,7 +1072,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         val mainJob = runOnDefaultDispatcher {
             val group = DataStore.currentGroup()
-            var profilesUnfiltered = SagerDatabase.proxyDao.getByGroup(group.id)
+            var profilesUnfiltered = targets ?: SagerDatabase.proxyDao.getByGroup(group.id)
             profilesUnfiltered = profilesUnfiltered.filter {
                 !it.useBrowserForwarder()
             }
@@ -1203,7 +1272,7 @@ class ConfigurationFragment @JvmOverloads constructor(
     // "<name> 🇩🇪 Germany (Hetzner)" tag into the profile display name. No new
     // database columns — the annotation lives entirely inside bean.name.
     @Suppress("EXPERIMENTAL_API_USAGE")
-    fun annotateGeoip() {
+    fun annotateGeoip(targets: List<ProxyEntity>? = null) {
         val test = TestDialog()
         val dialog = test.builder.show()
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
@@ -1214,7 +1283,9 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         val mainJob = runOnDefaultDispatcher {
             val group = DataStore.currentGroup()
-            val profiles = SagerDatabase.proxyDao.getByGroup(group.id)
+            // Selection mode passes the checked profiles; the toolbar entry
+            // point passes nothing and gets the whole group.
+            val profiles = targets ?: SagerDatabase.proxyDao.getByGroup(group.id)
             val profileCount = profiles.size
             var finished = 0
 
@@ -1288,7 +1359,7 @@ class ConfigurationFragment @JvmOverloads constructor(
     // link. The measured download speed is written into the profile ping field
     // used by the test dialog and appended to the display name.
     @Suppress("EXPERIMENTAL_API_USAGE")
-    fun speedTest() {
+    fun speedTest(targets: List<ProxyEntity>? = null) {
         val test = TestDialog()
         val dialog = test.builder.show()
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
@@ -1297,7 +1368,9 @@ class ConfigurationFragment @JvmOverloads constructor(
             val group = DataStore.currentGroup()
             // Only test profiles that passed the URL test (status == 1), if any
             // were tested; otherwise fall back to the whole group.
-            val all = SagerDatabase.proxyDao.getByGroup(group.id).filter {
+            // With an explicit list (selection mode) the fallback stays inside
+            // that list, so the speed test never wanders outside the selection.
+            val all = (targets ?: SagerDatabase.proxyDao.getByGroup(group.id)).filter {
                 !it.useBrowserForwarder()
             }
             val tested = all.filter { it.status == 1 }
@@ -1589,6 +1662,126 @@ class ConfigurationFragment @JvmOverloads constructor(
         lateinit var layoutManager: LinearLayoutManager
         lateinit var configurationListView: RecyclerView
 
+        // --- Exclave Next: contextual selection bar --------------------------
+        // Deliberately NOT in the toolbar: while the SearchView is expanded it
+        // takes over the whole toolbar, so any selection actions placed there
+        // would disappear exactly when the user is filtering. This bar is part
+        // of the list fragment and stays reachable during a search.
+        private var selectionBar: View? = null
+        private var selectionCount: TextView? = null
+        private var selectionAllButton: View? = null
+        private var selectionMoreButton: View? = null
+        private var selectionCloseButton: View? = null
+
+        /** True while the SearchView has a non-empty query. The bar stays
+         *  available in that state, because an expanded SearchView owns the
+         *  whole toolbar and the toolbar entry point is unreachable — this is
+         *  the only way to reach the bulk actions on a filtered list. */
+        private var filterActive = false
+
+        /** Called by the parent whenever the search query changes. */
+        fun onSearchFilterChanged(query: String) {
+            filterActive = query.isNotEmpty()
+            updateSelectionBar()
+        }
+
+        fun updateSelectionBar() {
+            if (!::adapter.isInitialized) return
+            val bar = selectionBar ?: return
+            val checked = adapter.checkedCount()
+            val visible = adapter.configurationIdList.size
+            // Shown while something is checked, or while a filter is narrowing
+            // the list — in both cases there is a set of profiles the user can
+            // act on right now.
+            val show = checked > 0 || filterActive
+            bar.isVisible = show
+            if (!show) return
+
+            selectionCount?.text = if (checked > 0) {
+                resources.getQuantityString(R.plurals.selected_count, checked, checked)
+            } else {
+                getString(R.string.selection_matched, visible)
+            }
+            // Nothing to close when only a filter is active.
+            selectionCloseButton?.isVisible = checked > 0
+            val allVisible = visible > 0 && checked == visible
+            selectionAllButton?.contentDescription = getString(
+                if (allVisible) R.string.action_select_none else R.string.action_select_all
+            )
+        }
+
+        fun exitSelectionMode() {
+            if (!::adapter.isInitialized) return
+            adapter.clearChecked()
+            updateSelectionBar()
+        }
+
+        fun hasCheckedProfiles(): Boolean =
+            ::adapter.isInitialized && adapter.checkedCount() > 0
+
+        private val selectionMenuListener = object : PopupMenu.OnMenuItemClickListener {
+            override fun onMenuItemClick(item: MenuItem): Boolean {
+                if (!::adapter.isInitialized) return true
+                when (item.itemId) {
+                    R.id.action_select_all -> adapter.selectAll()
+                    R.id.action_select_none -> adapter.clearChecked()
+                    // Every action below takes the checked profiles explicitly,
+                    // so a selection (or a search-filtered set) is operated on
+                    // instead of the whole group.
+                    R.id.action_selection_url_test ->
+                        withSelection { runOnDefaultDispatcher { requirePrent().urlTest(it) } }
+                    R.id.action_selection_annotate_geoip ->
+                        withSelection { requirePrent().annotateGeoip(it) }
+                    R.id.action_selection_speed_test ->
+                        withSelection { requirePrent().speedTest(it) }
+                    R.id.action_selection_clear_test_results ->
+                        withSelection { runOnDefaultDispatcher { requirePrent().clearTestResults(it) } }
+                    R.id.action_selection_clear_traffic ->
+                        withSelection { runOnDefaultDispatcher { requirePrent().clearTraffic(it) } }
+                    R.id.action_selection_delete_unavailable ->
+                        withSelection { runOnDefaultDispatcher { requirePrent().deleteUnavailable(it) } }
+                    R.id.action_selection_deduplicate ->
+                        withSelection { runOnDefaultDispatcher { requirePrent().deduplicate(it) } }
+                    R.id.action_selection_share -> withSelection { requirePrent().shareLinks(it) }
+                    R.id.action_selection_delete -> deleteChecked()
+                }
+                return true
+            }
+        }
+
+        /** Runs a bulk operation against the checked profiles. The bar is only
+         *  reachable in selection mode, so an empty set means "the visible
+         *  (filtered) list" — matching what the user is looking at. */
+        private inline fun withSelection(crossinline block: (List<ProxyEntity>) -> Unit) {
+            val targets = adapter.selectedProfiles()
+            if (targets.isEmpty()) return
+            block(targets)
+        }
+
+        private fun showSelectionMenu(anchor: View) {
+            val popup = PopupMenu(requireContext(), anchor)
+            popup.menuInflater.inflate(R.menu.profile_selection_menu, popup.menu)
+            val checked = if (::adapter.isInitialized) adapter.checkedCount() else 0
+            popup.menu.findItem(R.id.action_select_none).isVisible = checked > 0
+            popup.setOnMenuItemClickListener(selectionMenuListener)
+            popup.show()
+        }
+
+        private fun deleteChecked() {
+            val targets = adapter.selectedProfiles()
+            if (targets.isEmpty()) return
+            // Reuse the outer fragment's confirm-and-delete so selection mode
+            // and the group-wide deletes behave identically (same dialog, same
+            // list mutation, same deletion path). The selection is only dropped
+            // once the user actually confirms.
+            runOnDefaultDispatcher {
+                requirePrent().deleteProfiles(targets) {
+                    adapter.clearChecked()
+                    updateSelectionBar()
+                }
+            }
+        }
+
         val parent get() = parentFragment as? ConfigurationFragment
         fun requirePrent() = requireParentFragment() as ConfigurationFragment
 
@@ -1664,6 +1857,31 @@ class ConfigurationFragment @JvmOverloads constructor(
             if (!::proxyGroup.isInitialized) return
 
             configurationListView = view.findViewById(R.id.configuration_list)
+            selectionBar = view.findViewById(R.id.selection_bar)
+            selectionCount = view.findViewById(R.id.selection_count)
+            selectionAllButton = view.findViewById(R.id.selection_select_all)
+            selectionMoreButton = view.findViewById(R.id.selection_more)
+
+            selectionCloseButton = view.findViewById(R.id.selection_close)
+
+            selectionCloseButton?.setOnClickListener {
+                exitSelectionMode()
+            }
+            selectionAllButton?.setOnClickListener {
+                if (!::adapter.isInitialized) return@setOnClickListener
+                // Same button toggles between "check everything visible" and
+                // "drop the whole selection" — no separate unselect-all entry.
+                if (adapter.checkedCount() == adapter.configurationIdList.size) {
+                    adapter.clearChecked()
+                } else {
+                    adapter.selectAll()
+                }
+            }
+            selectionMoreButton?.setOnClickListener {
+                showSelectionMenu(it)
+            }
+            updateSelectionBar()
+
             ViewCompat.setOnApplyWindowInsetsListener(configurationListView) { v, insets ->
                 val bars = insets.getInsets(
                     WindowInsetsCompat.Type.systemBars()
@@ -1702,7 +1920,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                     override fun getDragDirs(
                         recyclerView: RecyclerView,
                         viewHolder: RecyclerView.ViewHolder,
-                    ) = if (isEnabled && !actionButtonPressed) super.getDragDirs(
+                    ) = if (isEnabled && !actionButtonPressed && !adapter.isSelectionMode) super.getDragDirs(
                         recyclerView, viewHolder
                     ) else 0
 
@@ -1798,6 +2016,83 @@ class ConfigurationFragment @JvmOverloads constructor(
             }
             var activeSelectionId: Long = -1
 
+            // --- Exclave Next: multi-select -----------------------------------
+            // Ids of the checked profiles. Kept as ids rather than positions so
+            // it survives filtering, reordering and list reloads. `filter()` below
+            // narrows `configurationIdList` to the search hits, and every
+            // "select all" here works off that list — so with an active search
+            // only the visible hits are selected, which is what the user sees.
+            val checkedIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+
+            val isSelectionMode: Boolean get() = checkedIds.isNotEmpty()
+
+            /** Drops checks that are no longer on screen.
+             *  Needed because the selection is scoped to what the list shows:
+             *  `filter()` narrows `configurationIdList` to the search hits, so a
+             *  check on a row that the filter hides would otherwise keep
+             *  selection mode alive with no way to clear it from the bar. */
+            private fun pruneChecked() {
+                if (checkedIds.isEmpty()) return
+                val visible = configurationIdList.toSet()
+                checkedIds.retainAll { it in visible }
+            }
+
+            /** The profiles an operation should act on: the checked ones if any,
+             *  otherwise every profile currently visible in the list. */
+            fun selectedProfiles(): List<ProxyEntity> {
+                val visible = configurationIdList.mapNotNull { getItem(it) }
+                if (checkedIds.isEmpty()) return visible
+                return visible.filter { it.id in checkedIds }
+            }
+
+            fun checkedCount(): Int = configurationIdList.count { it in checkedIds }
+
+            fun isChecked(id: Long): Boolean = id in checkedIds
+
+            fun toggleChecked(id: Long) {
+                if (!checkedIds.remove(id)) checkedIds.add(id)
+                val index = configurationIdList.indexOf(id)
+                if (index != -1) notifyItemChanged(index, "PAYLOAD_CHECK_CHANGE")
+                runOnMainDispatcher { updateSelectionBar() }
+            }
+
+            /** Enter selection mode with one profile checked. Used by the toolbar button.
+             *  Prefers the active profile so selection starts where the user is
+             *  standing; falls back to the top visible row when it is not in the
+             *  current list (e.g. after a search narrowed the view away from it). */
+            fun checkFirstVisible() {
+                val visible = configurationIdList
+                val active = DataStore.selectedProxy
+                val target = if (active in visible) active else visible.firstOrNull() ?: return
+                checkedIds.add(target)
+                // Full rebind: entering selection mode also swaps each row's
+                // click listener over to the toggle handler, and that listener
+                // is installed in ConfigurationHolder.bind().
+                notifyDataSetChanged()
+                runOnMainDispatcher { updateSelectionBar() }
+            }
+
+            /** Check every currently *visible* profile — i.e. the search hits
+             *  while a filter is active, the whole group otherwise. */
+            fun selectAll() {
+                val visible = configurationIdList.toList()
+                visible.forEach { checkedIds.add(it) }
+                // Full rebind, not a payload: entering selection mode also has
+                // to swap each row's click listener over to the toggle handler,
+                // and that listener is installed in ConfigurationHolder.bind().
+                notifyDataSetChanged()
+                runOnMainDispatcher { updateSelectionBar() }
+            }
+
+            fun clearChecked() {
+                if (checkedIds.isEmpty()) return
+                checkedIds.clear()
+                // Full rebind again: rows must get their normal
+                // "make active" click listener back and hide the checkbox.
+                notifyDataSetChanged()
+                runOnMainDispatcher { updateSelectionBar() }
+            }
+
             fun refreshSelection() {
                 val newId = DataStore.selectedProxy
                 if (activeSelectionId == newId) return
@@ -1815,7 +2110,9 @@ class ConfigurationFragment @JvmOverloads constructor(
                 position: Int,
                 payloads: MutableList<Any>
             ) {
-                if (payloads.contains("PAYLOAD_SELECTION_CHANGE")) {
+                if (payloads.contains("PAYLOAD_CHECK_CHANGE")) {
+                    holder.bindCheckState()
+                } else if (payloads.contains("PAYLOAD_SELECTION_CHANGE")) {
                     val entityId = configurationIdList[position]
 
                     val isSelected = (entityId == activeSelectionId)
@@ -1842,6 +2139,10 @@ class ConfigurationFragment @JvmOverloads constructor(
                             it.value.displayType().lowercase().contains(lower) ||
                             it.value.displayAddress().lowercase().contains(lower)
                 }.keys)
+                // Keep selection tied to what is on screen: rows the filter
+                // hides are dropped from the selection, so the bar count and
+                // the checkboxes never disagree.
+                pruneChecked()
                 notifyDataSetChanged()
             }
 
@@ -2006,6 +2307,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                 configurationListView.post {
                     configurationIdList.clear()
                     configurationIdList.addAll(newProfileIds)
+                    pruneChecked()
                     notifyDataSetChanged()
 
                     if (selectedProfileIndex != -1 && !scrolled) {
@@ -2041,6 +2343,19 @@ class ConfigurationFragment @JvmOverloads constructor(
             val shareLayer: LinearLayout = view.findViewById(R.id.share_layer)
             val shareButton: ImageView = view.findViewById(R.id.shareIcon)
             val deleteButton: ImageView = view.findViewById(R.id.deleteIcon)
+            val selectionBox: androidx.appcompat.widget.AppCompatCheckBox =
+                view.findViewById(R.id.selection_box)
+
+            /** Checkbox + row highlight for the multi-select state. Split out so
+             *  it can be rebound from a payload without a full re-bind. */
+            fun bindCheckState() {
+                if (!::entity.isInitialized) return
+                val inSelection = parent?.let { !it.select && adapter.isSelectionMode } ?: false
+                selectionBox.isVisible = inSelection
+                if (inSelection) {
+                    selectionBox.isChecked = adapter.isChecked(entity.id)
+                }
+            }
 
             fun bind(proxyEntity: ProxyEntity) {
                 val parent = parent ?: return
@@ -2050,6 +2365,13 @@ class ConfigurationFragment @JvmOverloads constructor(
                 if (parent.select) {
                     view.setOnClickListener {
                         (requireActivity() as SelectCallback).returnProfile(proxyEntity.id)
+                    }
+                } else if (adapter.isSelectionMode) {
+                    // Selection mode: a tap checks/unchecks the row instead of
+                    // switching the active profile. Long-press is untouched —
+                    // it still drags the row.
+                    view.setOnClickListener {
+                        adapter.toggleChecked(proxyEntity.id)
                     }
                 } else {
                     val pa = activity as MainActivity
@@ -2165,9 +2487,15 @@ class ConfigurationFragment @JvmOverloads constructor(
                 editButton.suppressDragWhilePressed { actionButtonPressed = it }
                 shareLayout.suppressDragWhilePressed { actionButtonPressed = it }
 
-                editButton.isGone = parent.select
-                deleteButton.isGone = parent.select
-                shareButton.isGone = parent.select
+                // Per-row buttons are hidden in selection mode: the bar is the action
+                // surface then, and leaving them visible invites mis-taps.
+                editButton.isGone = parent.select || adapter.isSelectionMode
+                deleteButton.isGone = parent.select || adapter.isSelectionMode
+                shareButton.isGone = parent.select || adapter.isSelectionMode
+
+                // Multi-select state is part of a normal bind too, so a row that
+                // scrolls in or is rebound elsewhere shows its checkbox.
+                bindCheckState()
 
                 runOnDefaultDispatcher {
                     val selected = (parent.selectedItem?.id
@@ -2194,7 +2522,10 @@ class ConfigurationFragment @JvmOverloads constructor(
                         popup.show()
                     }
 
-                    if (!parent.select) {
+                    // This block re-shows the share button, so it must respect
+                    // selection mode too — otherwise it would undo the
+                    // isGone set above and leave the button on screen.
+                    if (!parent.select && !adapter.isSelectionMode) {
                         val isInsecure = DataStore.profileSecurityAdvisory && proxyEntity.requireBean().isInsecure
                         onMainDispatcher {
                             if (isInsecure) {

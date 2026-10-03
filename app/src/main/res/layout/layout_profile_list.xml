@@ -1,17 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Exclave Next: group profile list.
+     A contextual selection bar sits ABOVE the list (not in the toolbar): while
+     the SearchView is expanded it owns the whole toolbar, so there is no room
+     for selection actions up there. It is visible only in selection mode. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/configuration_list"
-    android:clipToPadding="false"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:paddingLeft="4dp"
-    android:paddingTop="4dp"
-    android:paddingRight="4dp"
-    android:paddingBottom="64dp"
-    android:scrollbarSize="0dp"
-    app:fastScrollAutoHide="true"
-    app:fastScrollThumbColor="?colorPrimary"
-    app:fastScrollThumbInactiveColor="?colorPrimary"
-    tools:listitem="@layout/layout_profile" />
+    android:orientation="vertical"
+    tools:context=".ui.ConfigurationFragment">
+
+    <LinearLayout
+        android:id="@+id/selection_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary"
+        android:gravity="center_vertical"
+        android:minHeight="?attr/actionBarSize"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/selection_close"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/cancel"
+            android:focusable="true"
+            android:padding="12dp"
+            app:srcCompat="@drawable/ic_navigation_close" />
+
+        <TextView
+            android:id="@+id/selection_count"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="?android:attr/textAppearanceMedium"
+            android:textColor="@android:color/white"
+            tools:text="3 selected" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/selection_select_all"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/action_select_all"
+            android:focusable="true"
+            android:padding="12dp"
+            app:srcCompat="@drawable/ic_baseline_select_all" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/selection_more"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/more"
+            android:focusable="true"
+            android:padding="12dp"
+            app:srcCompat="@drawable/ic_baseline_more_vert_24" />
+
+    </LinearLayout>
+
+    <com.simplecityapps.recyclerview_fastscroll.views.FastScrollRecyclerView
+        android:id="@+id/configuration_list"
+        android:clipToPadding="false"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingLeft="4dp"
+        android:paddingTop="4dp"
+        android:paddingRight="4dp"
+        android:paddingBottom="64dp"
+        android:scrollbarSize="0dp"
+        app:fastScrollAutoHide="true"
+        app:fastScrollThumbColor="?colorPrimary"
+        app:fastScrollThumbInactiveColor="?colorPrimary"
+        tools:listitem="@layout/layout_profile" />
+
+</LinearLayout>
