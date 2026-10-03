@@ -670,7 +670,13 @@
     <string name="geoip_url_hint">https://ipwho.is/{ip}</string>
     <string name="geoip_url_label">URL</string>
     <string name="geoip_file_label">File name</string>
+    <string name="geoip_file_hint">GeoIP2-City.mmdb</string>
+    <string name="geoip_bad_file_name">File name must end with .mmdb</string>
     <string name="geoip_type_local">Local database</string>
+    <string name="geoip_add_country_db">GeoLite2-Country (local)</string>
+    <string name="geoip_add_asn_db">GeoLite2-ASN (local)</string>
+    <string name="geoip_add_custom_db">Other local database…</string>
+    <string name="geoip_add_custom_db_sum">Enter the file name as it is stored in the app folder. Import the file first on the Local databases screen. A database whose name mentions Country or City is used for the country, any other one for the provider.</string>
     <string name="geoip_type_api">Online API</string>
     <string name="geoip_entry_type">Type</string>
     <string name="geoip_entry_country">country</string>

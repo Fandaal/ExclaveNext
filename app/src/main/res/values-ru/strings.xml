@@ -615,7 +615,13 @@
     <string name="geoip_url_hint">https://ipwho.is/{ip}</string>
     <string name="geoip_url_label">URL</string>
     <string name="geoip_file_label">Имя файла</string>
+    <string name="geoip_file_hint">GeoIP2-City.mmdb</string>
+    <string name="geoip_bad_file_name">Имя файла должно оканчиваться на .mmdb</string>
     <string name="geoip_type_local">Локальная база</string>
+    <string name="geoip_add_country_db">GeoLite2-Country (локальная)</string>
+    <string name="geoip_add_asn_db">GeoLite2-ASN (локальная)</string>
+    <string name="geoip_add_custom_db">Другая локальная база…</string>
+    <string name="geoip_add_custom_db_sum">Введите имя файла в том виде, в каком он лежит в папке приложения. Сначала импортируйте файл на экране «Локальные базы». База, в имени которой есть Country или City, используется для страны, любая другая — для провайдера.</string>
     <string name="geoip_type_api">Онлайн API</string>
     <string name="geoip_entry_type">Тип</string>
     <string name="geoip_entry_country">страна</string>

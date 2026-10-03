@@ -26,6 +26,7 @@ import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.bg.DieUpdateResult
 import io.nekohasekai.sagernet.bg.GeoIpDatabaseManager
@@ -88,6 +89,15 @@ class GeoIpDatabaseActivity : ThemedActivity() {
     override fun onResume() {
         super.onResume()
         reload()
+    }
+
+    /**
+     * ThemedActivity.snackbarInternal throws NotImplementedError by default;
+     * only MainActivity, AssetsActivity and SubscriptionSourcesActivity override
+     * it. Update / import results are reported through it.
+     */
+    override fun snackbarInternal(text: CharSequence): Snackbar {
+        return Snackbar.make(binding.coordinator, text, Snackbar.LENGTH_LONG)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {

@@ -24,6 +24,7 @@ import androidx.core.view.updatePadding
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.bg.GeoIpDefaults
 import io.nekohasekai.sagernet.bg.GeoIpEntry
@@ -84,6 +85,16 @@ class GeoIpProviderListActivity : ThemedActivity() {
         return true
     }
 
+    /**
+     * ThemedActivity.snackbarInternal throws NotImplementedError by default;
+     * only MainActivity, AssetsActivity and SubscriptionSourcesActivity override
+     * it. Without this, every snackbar in this screen is a crash — which is what
+     * the delete button hit.
+     */
+    override fun snackbarInternal(text: CharSequence): Snackbar {
+        return Snackbar.make(binding.coordinator, text, Snackbar.LENGTH_LONG)
+    }
+
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.geoip_provider_menu, menu)
         return true
@@ -104,7 +115,62 @@ class GeoIpProviderListActivity : ThemedActivity() {
             )
             true
         }
+        R.id.action_add_mmdb_asn -> {
+            addEntry(
+                GeoIpEntry(
+                    type = GeoIpEntryType.MMDB_ASN,
+                    url = GeoIpDefaults.ASN_DB_URL,
+                    file = GeoIpDefaults.ASN_DB,
+                )
+            )
+            true
+        }
+        R.id.action_add_mmdb_custom -> {
+            promptForLocalDatabase()
+            true
+        }
         else -> super.onOptionsItemSelected(item)
+    }
+
+    /**
+     * A third local database (GeoIP2-City, an ISP list, …). The file name must be
+     * known to the resolver, so the dialog asks for the exact name it has inside
+     * externalAssets — the database screen writes it there on import.
+     *
+     * The capability is guessed from the name because a custom database is not
+     * registered as a new entry type: a country-capable database is a Country
+     * entry, anything else is treated as provider-only. That mirrors what the
+     * reader can actually answer for an unknown MMDB type.
+     */
+    private fun promptForLocalDatabase() {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT
+            hint = getString(R.string.geoip_file_hint)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.geoip_add_custom_db)
+            .setMessage(R.string.geoip_add_custom_db_sum)
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = input.text.toString().trim()
+                when {
+                    name.isEmpty() -> snackbar(R.string.geoip_bad_file_name)
+                    !name.endsWith(".mmdb") -> snackbar(R.string.geoip_bad_file_name)
+                    else -> {
+                        val providesCountry = name.contains("Country", ignoreCase = true) ||
+                                name.contains("City", ignoreCase = true)
+                        addEntry(
+                            GeoIpEntry(
+                                type = if (providesCountry) GeoIpEntryType.MMDB_COUNTRY
+                                else GeoIpEntryType.MMDB_ASN,
+                                file = name,
+                            )
+                        )
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun promptForApiUrl() {

@@ -10,7 +10,13 @@
         <menu>
             <item
                 android:id="@+id/action_add_mmdb_country"
-                android:title="@string/geoip_type_local" />
+                android:title="@string/geoip_add_country_db" />
+            <item
+                android:id="@+id/action_add_mmdb_asn"
+                android:title="@string/geoip_add_asn_db" />
+            <item
+                android:id="@+id/action_add_mmdb_custom"
+                android:title="@string/geoip_add_custom_db" />
             <item
                 android:id="@+id/action_add_api"
                 android:title="@string/geoip_type_api" />
