@@ -653,14 +653,14 @@
     <!-- Exclave Next: групповое выделение конфигов -->
     <string name="action_select_all">Выделить все</string>
     <string name="action_select_none">Снять выделение</string>
-    <string name="action_selection_mode">Выделение конфигов</string>
+    <string name="action_selection_mode">Выделить</string>
     <plurals name="selected_count">
         <item quantity="one">%d выделен</item>
         <item quantity="few">%d выделено</item>
         <item quantity="many">%d выделено</item>
         <item quantity="other">%d выделено</item>
     </plurals>
-    <string name="action_selection_share">Поделиться ссылками</string>
+    <string name="action_selection_share">Экспорт в буфер обмена</string>
     <string name="selection_shared">Скопировано ссылок: %d</string>
     <string name="selection_matched">Найдено: %d</string>
     <string name="cancel">Отмена</string>

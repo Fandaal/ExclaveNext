@@ -4,7 +4,43 @@
     android:viewportWidth="24"
     android:viewportHeight="24"
     android:tint="?attr/colorControlNormal">
+    <!-- Dashed square with a solid empty square inside: the standard
+         "select / deselect all" affordance. Stroke segments are dashed by
+         hand (solid dashes joined by gaps) because VectorDrawable strokes
+         have no dash support. -->
+    <path
+        android:pathData="M3,3.5 L21,3.5"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8" />
+    <path
+        android:pathData="M21,3.5 L21,20.5"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8" />
+    <path
+        android:pathData="M21,20.5 L3,20.5"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8" />
+    <path
+        android:pathData="M3,20.5 L3,3.5"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8" />
+    <path
+        android:pathData="M6.5,3.5 L9.5,3.5 M12,3.5 L15,3.5 M17.5,3.5 L20.5,3.5"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8" />
+    <path
+        android:pathData="M6.5,20.5 L9.5,20.5 M12,20.5 L15,20.5 M17.5,20.5 L20.5,20.5"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8" />
+    <path
+        android:pathData="M3,6.5 L3,9.5 M3,12 L3,15 M3,17.5 L3,20.5"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8" />
+    <path
+        android:pathData="M21,6.5 L21,9.5 M21,12 L21,15 M21,17.5 L21,20.5"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8" />
     <path
         android:fillColor="@android:color/white"
-        android:pathData="M3,5h2v2H3zM7,5h14v2H7zM3,11h2v2H3zM7,11h14v2H7zM3,17h2v2H3zM7,17h14v2H7z" />
+        android:pathData="M8.5,8.5 L15.5,8.5 L15.5,15.5 L8.5,15.5 Z" />
 </vector>

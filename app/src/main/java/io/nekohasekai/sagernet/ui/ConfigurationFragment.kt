@@ -290,7 +290,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                     val fragment = (childFragmentManager.findFragmentByTag(
                         "f" + selectedGroup.id
                     ) as? GroupFragment)
-                    if (fragment != null && fragment.hasCheckedProfiles()) {
+                    if (fragment != null && fragment.isSelectionMode()) {
                         fragment.exitSelectionMode()
                     } else {
                         isEnabled = false
@@ -679,14 +679,13 @@ class ConfigurationFragment @JvmOverloads constructor(
                 startActivity(Intent(requireActivity(), BalancerSettingsActivity::class.java))
             }
             R.id.action_selection_mode -> {
-                // Enter selection mode from the toolbar. Checks the topmost
-                // visible row so the user starts where they were looking; the
-                // full rebind also swaps rows over to the toggle click handler.
+                // Enter selection mode from the toolbar. Nothing is checked on
+                // entry — the user picks from a clean slate.
                 if (select) return true
                 val fragment = childFragmentManager.findFragmentByTag(
                     "f" + selectedGroup.id
                 ) as? GroupFragment
-                fragment?.adapter?.checkFirstVisible()
+                fragment?.adapter?.startSelectionMode()
                 fragment?.updateSelectionBar()
             }
             R.id.action_clear_traffic_statistics -> {
@@ -1690,34 +1689,42 @@ class ConfigurationFragment @JvmOverloads constructor(
             val bar = selectionBar ?: return
             val checked = adapter.checkedCount()
             val visible = adapter.configurationIdList.size
-            // Shown while something is checked, or while a filter is narrowing
-            // the list — in both cases there is a set of profiles the user can
-            // act on right now.
-            val show = checked > 0 || filterActive
+            // Shown while the mode is on, or while a filter is narrowing the
+            // list. Both cases mean there is a set of profiles the user can act
+            // on right now — driven by the explicit mode flag, not by whether
+            // anything happens to be checked.
+            val inMode = adapter.isSelectionMode
+            val show = inMode || filterActive
             bar.isVisible = show
             if (!show) return
 
             selectionCount?.text = if (checked > 0) {
                 resources.getQuantityString(R.plurals.selected_count, checked, checked)
             } else {
+                // Nothing picked yet (mode just opened, or a filter is on):
+                // show how many rows are on screen so the bar is not blank.
                 getString(R.string.selection_matched, visible)
             }
-            // Nothing to close when only a filter is active.
-            selectionCloseButton?.isVisible = checked > 0
+            // The close button exits the mode, so it belongs whenever the mode
+            // is on — including before anything is checked.
+            selectionCloseButton?.isVisible = inMode
             val allVisible = visible > 0 && checked == visible
             selectionAllButton?.contentDescription = getString(
                 if (allVisible) R.string.action_select_none else R.string.action_select_all
             )
         }
 
+        /** Leaves selection mode entirely — the only paths here are the close
+         *  button and Back. Unchecking everything is NOT an exit; it is the
+         *  select-all button, and the mode stays up. */
         fun exitSelectionMode() {
             if (!::adapter.isInitialized) return
-            adapter.clearChecked()
+            adapter.setSelectionMode(false)
             updateSelectionBar()
         }
 
-        fun hasCheckedProfiles(): Boolean =
-            ::adapter.isInitialized && adapter.checkedCount() > 0
+        fun isSelectionMode(): Boolean =
+            ::adapter.isInitialized && adapter.isSelectionMode
 
         private val selectionMenuListener = object : PopupMenu.OnMenuItemClickListener {
             override fun onMenuItemClick(item: MenuItem): Boolean {
@@ -1869,8 +1876,9 @@ class ConfigurationFragment @JvmOverloads constructor(
             }
             selectionAllButton?.setOnClickListener {
                 if (!::adapter.isInitialized) return@setOnClickListener
-                // Same button toggles between "check everything visible" and
-                // "drop the whole selection" — no separate unselect-all entry.
+                // Toggles between "check everything visible" and "uncheck
+                // everything". The second case does NOT leave selection mode —
+                // only the close button and Back do that.
                 if (adapter.checkedCount() == adapter.configurationIdList.size) {
                     adapter.clearChecked()
                 } else {
@@ -2024,7 +2032,29 @@ class ConfigurationFragment @JvmOverloads constructor(
             // only the visible hits are selected, which is what the user sees.
             val checkedIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
 
-            val isSelectionMode: Boolean get() = checkedIds.isNotEmpty()
+            // Selection mode is an explicit state, NOT a function of the checked
+            // set. Unchecking everything must leave the mode standing (the user
+            // keeps choosing), so the mode can only be left deliberately: the
+            // close button, Back, or switching away. Deriving it from
+            // `checkedIds.isNotEmpty()` — as this did before — made the two
+            // inseparable and forced a first row to be pre-checked on entry.
+            private var selectionModeOn = false
+
+            val isSelectionMode: Boolean get() = selectionModeOn
+
+            /** Turns the mode on (showing checkboxes on every row) or off
+             *  (restoring the normal tap-to-activate rows and hiding the bar).
+             *  Turning it on checks nothing: the user starts from a clean slate. */
+            fun setSelectionMode(enabled: Boolean) {
+                if (selectionModeOn == enabled) return
+                selectionModeOn = enabled
+                if (!enabled) checkedIds.clear()
+                // Full rebind: the mode decides both the checkbox visibility and
+                // which click listener each row gets, and that listener is
+                // installed in ConfigurationHolder.bind().
+                notifyDataSetChanged()
+                runOnMainDispatcher { updateSelectionBar() }
+            }
 
             /** Drops checks that are no longer on screen.
              *  Needed because the selection is scoped to what the list shows:
@@ -2056,20 +2086,11 @@ class ConfigurationFragment @JvmOverloads constructor(
                 runOnMainDispatcher { updateSelectionBar() }
             }
 
-            /** Enter selection mode with one profile checked. Used by the toolbar button.
-             *  Prefers the active profile so selection starts where the user is
-             *  standing; falls back to the top visible row when it is not in the
-             *  current list (e.g. after a search narrowed the view away from it). */
-            fun checkFirstVisible() {
-                val visible = configurationIdList
-                val active = DataStore.selectedProxy
-                val target = if (active in visible) active else visible.firstOrNull() ?: return
-                checkedIds.add(target)
-                // Full rebind: entering selection mode also swaps each row's
-                // click listener over to the toggle handler, and that listener
-                // is installed in ConfigurationHolder.bind().
-                notifyDataSetChanged()
-                runOnMainDispatcher { updateSelectionBar() }
+            /** Enter selection mode with nothing checked. Used by the toolbar button:
+             *  the user picks from a clean slate rather than having a row they
+             *  never touched silently pre-selected. */
+            fun startSelectionMode() {
+                setSelectionMode(true)
             }
 
             /** Check every currently *visible* profile — i.e. the search hits
@@ -2084,6 +2105,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                 runOnMainDispatcher { updateSelectionBar() }
             }
 
+            /** Unchecks everything but STAYS in selection mode — the user keeps picking.
+             *  Only setSelectionMode(false) (close button / Back) leaves the mode. */
             fun clearChecked() {
                 if (checkedIds.isEmpty()) return
                 checkedIds.clear()
