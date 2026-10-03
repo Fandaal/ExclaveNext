@@ -100,19 +100,41 @@ class ConfigurationFragment @JvmOverloads constructor(
     PopupMenu.OnMenuItemClickListener,
     Toolbar.OnMenuItemClickListener {
 
-    val onBackPressedCallback = object : OnBackPressedCallback(enabled = false) {
-        override fun handleOnBackPressed() {
-            searchView?.onActionViewCollapsed()
-            searchView?.clearFocus()
-            // Clear the proxy flag too, or it stays stuck true and keeps
-            // outranking selection mode for the rest of the session.
-            searchExpanded = false
-            // The query survives onActionViewCollapsed(), so clear it here —
-            // otherwise the fragment would keep showing the filtered bar with
-            // no search field visible to explain it.
-            searchView?.setQuery("", false)
+    // One callback for this screen, enabled whenever the search field has focus
+        // OR selection mode is on. Registered once, like the original code, so
+        // there is nothing to re-arm.
+        //
+        // A second, separate callback for selection mode was the wrong approach:
+        // it had to be kept in sync with this one, and every attempt either left
+        // Back dead or sent it somewhere that did nothing. Selection mode is
+        // handled here instead, where Back is already routed.
+        val onBackPressedCallback = object : OnBackPressedCallback(enabled = false) {
+            override fun handleOnBackPressed() {
+                val fragment = (childFragmentManager.findFragmentByTag(
+                    "f" + selectedGroup.id
+                ) as? GroupFragment)
+
+                // Selection mode first: Back leaves the selection, and the
+                // search field is left alone.
+                if (fragment != null && fragment.isSelectionMode()) {
+                    fragment.exitSelectionMode()
+                    // Nothing left for this callback to do once the selection
+                    // is closed — unless the search field is still focused.
+                    isEnabled = (searchView?.isFocused ?: false)
+                    return
+                }
+
+                searchView?.onActionViewCollapsed()
+                searchView?.clearFocus()
+                // Clear the proxy flag too, or it stays stuck true and keeps
+                // outranking selection mode for the rest of the session.
+                searchExpanded = false
+                // The query survives onActionViewCollapsed(), so clear it here —
+                // otherwise the fragment would keep showing the filtered bar with
+                // no search field visible to explain it.
+                searchView?.setQuery("", false)
+            }
         }
-    }
 
     interface SelectCallback {
         fun returnProfile(profileId: Long)
@@ -200,18 +222,12 @@ class ConfigurationFragment @JvmOverloads constructor(
             // Focus + a non-empty query is the usable proxy for "the search
             // field is open": SearchView offers no getter and no listeners.
             searchExpanded = hasFocus || !(searchView?.query.isNullOrEmpty() ?: true)
-            // Selection mode also needs Back while the search field is focused
-            // but the user has already tapped into the list, so arm whenever
-            // either one needs it — not on focus alone.
-            val fragment = (childFragmentManager.findFragmentByTag(
+            // One place decides whether this screen's Back callback is armed:
+            // selection mode counts too, so tapping into the list while
+            // filtering must not leave Back dead.
+            (childFragmentManager.findFragmentByTag(
                 "f" + selectedGroup.id
-            ) as? GroupFragment)
-            val selectionWantsBack = fragment?.isSelectionMode() == true
-            if (selectionWantsBack) {
-                (requireActivity() as? MainActivity)?.onBackPressedCallback?.isEnabled = true
-            } else {
-                onBackPressedCallback.isEnabled = hasFocus
-            }
+            ) as? GroupFragment)?.syncBackCallback()
         }
         searchView?.let {
             // override onBackPressedCallback of MainActivity
@@ -303,37 +319,6 @@ class ConfigurationFragment @JvmOverloads constructor(
         }
 
         (requireActivity() as? MainActivity)?.onBackPressedCallback?.isEnabled = false
-
-        // Back should leave selection mode before it leaves the screen. Registered
-        // last, so a focused search field still collapses first — back
-        // callbacks fire in reverse registration order.
-        //
-        // When there is nothing left to consume, the callback hands the press
-        // on by ENABLING MainActivity's callback rather than disabling itself
-        // and calling onBackPressed() again. Self-disabling looked equivalent
-        // but is not: it burned the callback permanently, so the second Back
-        // press found no enabled callback and the activity finished. This
-        // matches how every other screen in the app defers to the activity.
-        (requireActivity() as? MainActivity)?.onBackPressedDispatcher?.addCallback(
-            viewLifecycleOwner,
-            object : OnBackPressedCallback(false) {
-                override fun handleOnBackPressed() {
-                    val fragment = (childFragmentManager.findFragmentByTag(
-                        "f" + selectedGroup.id
-                    ) as? GroupFragment)
-                    if (fragment != null && fragment.isSelectionMode()) {
-                        fragment.exitSelectionMode()
-                    } else {
-                        // Nothing of ours left to handle: let MainActivity
-                        // decide. Re-enable on the next selection-mode entry
-                        // (see onSearchFilterChanged / the bar), and stay out
-                        // of the way otherwise.
-                        (requireActivity() as? MainActivity)
-                            ?.onBackPressedCallback?.isEnabled = true
-                    }
-                }
-            }
-        )
     }
 
     override fun onDestroy() {
@@ -1728,20 +1713,14 @@ class ConfigurationFragment @JvmOverloads constructor(
             updateSelectionBar()
         }
 
-        /** Keeps the Back callback armed exactly while selection mode can
-         *  consume a press. Armed on entry, disarmed on exit — and, importantly,
-         *  armed again on the NEXT entry, since the callback that defers to
-         *  MainActivity cannot re-arm itself. */
-        private fun syncBackCallback() {
-            val callback = (requireActivity() as? MainActivity)
-                ?.onBackPressedCallback ?: return
-            // searchView lives on the parent fragment — GroupFragment is a plain
-            // nested class, not an inner one, so it cannot reach it unqualified.
+        /** Arms this screen's single Back callback while it has something to do:
+         *  an open search field, or selection mode. This is the ONLY place the
+         *  callback is touched after registration — the earlier design kept a
+         *  separate callback for selection mode, which is what broke Back. */
+        fun syncBackCallback() {
             val searchOpen = (parent as? ConfigurationFragment)?.searchExpanded ?: false
-            callback.isEnabled = isSelectionMode() ||
-                    // Never steal Back from an open search field: that callback
-                    // is the one that should collapse it.
-                    searchOpen
+            (parent as? ConfigurationFragment)?.onBackPressedCallback?.isEnabled =
+                    isSelectionMode() || searchOpen
         }
 
         /** Entry point into selection mode, from the toolbar or the bar. */
