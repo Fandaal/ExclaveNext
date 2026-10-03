@@ -24,6 +24,7 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.view.*
 import android.widget.ImageView
@@ -31,6 +32,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SearchView
 import androidx.appcompat.widget.Toolbar
@@ -802,6 +804,30 @@ class ConfigurationFragment @JvmOverloads constructor(
         return true
     }
 
+    // Multi-round counter. Two different denominators are in play, so both are shown
+    // explicitly instead of the old "56/122 (2/3)" which mixed them:
+    //   global — profiles whose FINAL verdict is known, out of the whole group.
+    //            Monotonic; this is what the progress bar shows.
+    //   round  — attempts made in the current round, out of the profiles that round
+    //            started with. Moves on every attempt, including retries.
+    private fun updateTestCounter(
+        dialog: AlertDialog,
+        done: Int,
+        total: Int,
+        roundAttempt: Int,
+        roundTotal: Int,
+        round: Int,
+        rounds: Int,
+    ) {
+        val neutral = dialog.getButton(DialogInterface.BUTTON_NEUTRAL)
+        neutral.text = if (rounds > 1) {
+            "$done/$total · $round/$rounds: $roundAttempt/$roundTotal"
+        } else {
+            // A single round makes the second pair pure noise.
+            "$done/$total"
+        }
+    }
+
     inner class TestDialog {
         val binding = LayoutProgressListBinding.inflate(layoutInflater)
         val builder = MaterialAlertDialogBuilder(requireContext()).setView(binding.root)
@@ -822,23 +848,51 @@ class ConfigurationFragment @JvmOverloads constructor(
                 results.add(profile)
                 val index = results.size - 1
                 adapter.notifyItemInserted(index)
-                try {
-                    scrollTimer.schedule(timerTask {
-                        binding.listView.post {
-                            if (currentTask == this) binding.listView.smoothScrollToPosition(index)
-                        }
-                    }.also {
-                        currentTask?.cancel()
-                        currentTask = it
-                    }, 500L)
-                } catch (ignored: Exception) {
+                // Follow the test as it happens: scroll only if this row is
+                // already near the viewport. Auto-scrolling on every insert
+                // fights the user and, with several workers finishing at once,
+                // drags the list to the bottom and back. The original app did
+                // this unconditionally, which was fine when rows appeared one
+                // at a time.
+                if (isRowVisible(index)) {
+                    scrollToPosition(index)
                 }
+            }
+        }
+
+        private fun isRowVisible(index: Int): Boolean {
+            val lm = binding.listView.layoutManager as? LinearLayoutManager ?: return true
+            if (index < 0) return false
+            val first = lm.findFirstVisibleItemPosition()
+            val last = lm.findLastVisibleItemPosition()
+            if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return false
+            // Keep a margin of a couple of rows around the viewport so the
+            // insertion is visible, but don't yank the list across the screen.
+            val margin = 2
+            return index >= first - margin && index <= last + margin
+        }
+
+        private fun scrollToPosition(index: Int) {
+            try {
+                scrollTimer.schedule(timerTask {
+                    binding.listView.post {
+                        if (currentTask == this) binding.listView.smoothScrollToPosition(index)
+                    }
+                }.also {
+                    currentTask?.cancel()
+                    currentTask = it
+                }, 500L)
+            } catch (ignored: Exception) {
             }
         }
 
         fun update(profile: ProxyEntity) {
             binding.listView.post {
-                val index = results.indexOf(profile)
+                // Keyed by id rather than indexOf(): value-equality works today only because
+                // `results` holds the same mutated instances, so it is correct but
+                // silent about it. An id lookup cannot drift if that ever changes.
+                val index = results.indexOfLast { it.id == profile.id }
+                if (index < 0) return@post
                 adapter.notifyItemChanged(index)
             }
         }
@@ -955,17 +1009,22 @@ class ConfigurationFragment @JvmOverloads constructor(
             }
 
             val profileCount = profilesUnfiltered.size
-            var finishedProfileCount = 0
 
+            // Written from every worker at once — must be atomic.
+            val finishedProfileCount = java.util.concurrent.atomic.AtomicInteger(0)
+
+            // Attempts made in the CURRENT round, and how many profiles that
+            // round started with. Reset per round; the global counter above
+            // keeps rising so the progress bar never jumps backwards.
+            val roundDoneCount = java.util.concurrent.atomic.AtomicInteger(0)
             val link = DataStore.connectionTestURL
             val timeout = DataStore.connectionTestTimeout
             val rounds = DataStore.connectionTestRounds.coerceAtLeast(1)
 
-            // Insert all profiles into the dialog once, reset status.
-            for (profile in profilesUnfiltered) {
-                profile.status = 0
-                test.insert(profile)
-            }
+            // Rows are NOT inserted here: TestDialog.insert() is called by each
+            // worker when it actually picks a profile up (first round only), so
+            // the list grows in step with the test instead of showing every row
+            // as "testing" before a single one has been probed.
 
             // A profile is considered dead only if it fails EVERY round.
             // We keep retrying only the ones that haven't succeeded yet.
@@ -979,23 +1038,62 @@ class ConfigurationFragment @JvmOverloads constructor(
                 val stillPending = ConcurrentLinkedQueue<ProxyEntity>()
                 val queue = ConcurrentLinkedQueue(roundList)
 
+                // Attempts made so far in this round, out of the ones it started with.
+                roundDoneCount.set(0)
+                val roundTotal = roundList.size
+
                 onMainDispatcher {
-                    // TODO: fix l10n — show current round in the neutral button.
-                    dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
-                        "$finishedProfileCount/$profileCount ($round/$rounds)"
+                    updateTestCounter(
+                        dialog, finishedProfileCount.get(), profileCount,
+                        roundDoneCount.get(), roundTotal, round, rounds
+                    )
                 }
 
                 testJobs.clear()
-                repeat(DataStore.connectionTestConcurrency) {
+
+                // Diagnostics for the "thread count does nothing" report: track how
+                // many probes are genuinely in flight, and when each one started, so
+                // a run can be checked for real overlap instead of guessed at.
+                val inFlight = java.util.concurrent.atomic.AtomicInteger(0)
+                val peakInFlight = java.util.concurrent.atomic.AtomicInteger(0)
+                val testStartMs = SystemClock.elapsedRealtime()
+                val workerStarts = java.util.Collections.synchronizedList(
+                    ArrayList<Long>(profilesUnfiltered.size)
+                )
+
+                repeat(DataStore.connectionTestConcurrency) { workerIndex ->
                     testJobs.add(launch {
                         while (isActive) {
                             val profile = queue.poll() ?: break
-                            // On a retry round, mark the profile as testing again.
-                            if (round > 1) {
+                            // Every attempt counts for the round counter, even when
+                            // the profile gets re-queued — otherwise the round
+                            // denominator would shrink as failures re-enter it.
+                            val roundAttempt = roundDoneCount.incrementAndGet()
+                            workerStarts.add(SystemClock.elapsedRealtime() - testStartMs)
+                            val now = inFlight.incrementAndGet()
+                            // Not getAndUpdate(): that's API 24, and the legacy
+                            // flavor still targets minSdk 21.
+                            synchronized(peakInFlight) {
+                                if (now > peakInFlight.get()) peakInFlight.set(now)
+                            }
+                            // First round: add the row when the worker
+                            // actually starts on it, so the list follows the
+                            // test instead of being pre-filled. Later rounds
+                            // reuse the row that already exists.
+                            if (round == 1) {
+                                profile.status = 0
+                                test.insert(profile)
+                            } else {
+                                // On a retry round, mark the profile as testing again.
                                 profile.status = 0
                                 test.update(profile)
                             }
 
+                            // "Will this be probed again?" — decided where the profile is re-queued.
+                            // Same behaviour as the previous `profile !in stillPending`
+                            // probe (which worked because the re-queue stores the same
+                            // instance), but explicit rather than identity-dependent.
+                            var requeued = false
                             try {
                                 val instance = if (DataStore.tunImplementation == TunImplementation.SYSTEM && DataStore.serviceMode == Key.MODE_VPN && SagerNet.started && DataStore.startedProfile > 0) {
                                     V2RayTestInstance(profile, link, timeout, protectPath = SagerNet.deviceStorage.noBackupFilesDir.toString() + "/protect_path")
@@ -1018,36 +1116,71 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 // Only genuine failures (status 3) get another chance.
                                 if (round < rounds) {
                                     stillPending.add(profile)
+                                    requeued = true
                                 }
                             }
 
-                            // Count a profile as "finished" only on its final attempt
-                            // (either it succeeded, or this is the last round, or it's a plugin error).
-                            val isFinal = profile.status == 1 || profile.status == -1 ||
-                                profile !in stillPending
+                            // A profile counts as finished only when it will not be
+                            // probed again: it succeeded, the plugin is missing, or
+                            // it just failed its last round.
+                            val isFinal = !requeued && (profile.status == 1 || profile.status == -1 || round >= rounds)
                             if (isFinal) {
+                                val done = finishedProfileCount.incrementAndGet()
                                 onMainDispatcher {
-                                    finishedProfileCount++
                                     test.binding.progressCircular.apply {
                                         isVisible = true
+                                        // Shipped as android:indeterminate="true". Material does switch it to
+                                        // determinate by itself, but only after the
+                                        // running indeterminate cycle finishes
+                                        // (~2s), and every setProgressCompat() call
+                                        // re-arms that request. Flip it once, here,
+                                        // so the bar tracks the count immediately.
+                                        if (isIndeterminate) isIndeterminate = false
                                         setProgressCompat(
-                                            ((finishedProfileCount.toDouble() / profileCount.toDouble()) * 100).toInt(),
+                                            ((done.toDouble() / profileCount.toDouble()) * 100).toInt(),
                                             true
                                         )
                                     }
-                                    dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
-                                        "$finishedProfileCount/$profileCount ($round/$rounds)"
+                                    updateTestCounter(
+                                        dialog, done, profileCount,
+                                        roundAttempt, roundTotal, round, rounds
+                                    )
+                                }
+                            } else {
+                                // Progress inside the round still moves even though
+                                // the global count does not — otherwise the counter
+                                // looks frozen while profiles are being retried.
+                                onMainDispatcher {
+                                    updateTestCounter(
+                                        dialog, finishedProfileCount.get(), profileCount,
+                                        roundAttempt, roundTotal, round, rounds
+                                    )
                                 }
                             }
 
                             test.update(profile)
                             ProfileManager.updateProfile(profile)
+                            inFlight.decrementAndGet()
                         }
                     })
                 }
 
                 testJobs.joinAll()
                 pending = stillPending
+
+                // Log real concurrency so "the thread setting does nothing" can be
+                // confirmed or ruled out from a bug report alone. Starts are
+                // compared in 250ms buckets: if N workers really overlapped,
+                // several probes share a bucket instead of landing apart.
+                val roundMs = SystemClock.elapsedRealtime() - testStartMs
+                val buckets = workerStarts.groupingBy { it / 250L }.eachCount().toSortedMap()
+                io.nekohasekai.sagernet.ktx.Logs.i(
+                    "URLTEST round=$round/$rounds profiles=$profileCount " +
+                        "workers=${DataStore.connectionTestConcurrency} " +
+                        "probes=${workerStarts.size} " +
+                        "peakInFlight=${peakInFlight.get()} " +
+                        "elapsedMs=$roundMs starts250ms=$buckets"
+                )
             }
 
             test.close()
