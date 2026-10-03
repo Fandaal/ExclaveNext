@@ -1680,6 +1680,7 @@ class ConfigurationFragment @JvmOverloads constructor(
         private var selectionAllButton: View? = null
         private var selectionMoreButton: View? = null
         private var selectionCloseButton: View? = null
+        private var selectionEnterButton: View? = null
 
         /** True while the SearchView has a non-empty query. The bar stays
          *  available in that state, because an expanded SearchView owns the
@@ -1717,6 +1718,9 @@ class ConfigurationFragment @JvmOverloads constructor(
             // The close button exits the mode, so it belongs whenever the mode
             // is on — including before anything is checked.
             selectionCloseButton?.isVisible = inMode
+            // The enter button is only needed while the mode is OFF; once the
+            // checkboxes are up it would just be a duplicate way in.
+            selectionEnterButton?.isVisible = !inMode
             val allVisible = visible > 0 && checked == visible
             selectionAllButton?.contentDescription = getString(
                 if (allVisible) R.string.action_select_none else R.string.action_select_all
@@ -1879,9 +1883,16 @@ class ConfigurationFragment @JvmOverloads constructor(
             selectionMoreButton = view.findViewById(R.id.selection_more)
 
             selectionCloseButton = view.findViewById(R.id.selection_close)
+            selectionEnterButton = view.findViewById(R.id.selection_enter)
 
             selectionCloseButton?.setOnClickListener {
                 exitSelectionMode()
+            }
+            // Second way into selection mode, reachable while the search field
+            // owns the toolbar. Checks nothing — the user picks from a clean slate.
+            selectionEnterButton?.setOnClickListener {
+                if (!::adapter.isInitialized) return@setOnClickListener
+                adapter.startSelectionMode()
             }
             selectionAllButton?.setOnClickListener {
                 if (!::adapter.isInitialized) return@setOnClickListener
@@ -2105,6 +2116,11 @@ class ConfigurationFragment @JvmOverloads constructor(
             /** Check every currently *visible* profile — i.e. the search hits
              *  while a filter is active, the whole group otherwise. */
             fun selectAll() {
+                // Checking rows implies the mode: the checkboxes have to appear,
+                // otherwise the user would see "N selected" with nothing to look
+                // at and no way to undo it row by row. This is reachable from the
+                // bar during a search, where the mode is otherwise still off.
+                if (!selectionModeOn) setSelectionMode(true)
                 val visible = configurationIdList.toList()
                 visible.forEach { checkedIds.add(it) }
                 // Full rebind, not a payload: entering selection mode also has

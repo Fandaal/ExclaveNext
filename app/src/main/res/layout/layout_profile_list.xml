@@ -45,6 +45,19 @@
             android:textColor="@android:color/white"
             tools:text="3 selected" />
 
+        <!-- Entry point into selection mode. Needed here and not only in the
+             toolbar because an expanded SearchView owns the whole toolbar, so
+             while filtering the toolbar item cannot be reached. -->
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/selection_enter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/action_selection_mode"
+            android:focusable="true"
+            android:padding="12dp"
+            app:srcCompat="@drawable/ic_baseline_view_list_24" />
+
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/selection_select_all"
             android:layout_width="wrap_content"
