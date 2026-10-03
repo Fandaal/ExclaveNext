@@ -1714,20 +1714,20 @@ class ConfigurationFragment @JvmOverloads constructor(
         }
 
         /** Arms this screen's single Back callback while it has something to do:
-         *  an open search field, or selection mode. This is the ONLY place the
-         *  callback is touched after registration — the earlier design kept a
-         *  separate callback for selection mode, which is what broke Back. */
+         *  an open search field, or selection mode. Called from the one place
+         *  selection mode changes, from the search filter/focus changes, and
+         *  after Back has consumed a press. */
         fun syncBackCallback() {
             val searchOpen = (parent as? ConfigurationFragment)?.searchExpanded ?: false
             (parent as? ConfigurationFragment)?.onBackPressedCallback?.isEnabled =
                     isSelectionMode() || searchOpen
         }
 
-        /** Entry point into selection mode, from the toolbar or the bar. */
+        /** Entry point into selection mode, from the toolbar or the bar.
+         *  setSelectionMode() syncs the Back callback itself. */
         fun enterSelectionMode() {
             if (!::adapter.isInitialized) return
             adapter.startSelectionMode()
-            syncBackCallback()
             updateSelectionBar()
         }
 
@@ -1767,12 +1767,10 @@ class ConfigurationFragment @JvmOverloads constructor(
         /** Leaves selection mode entirely — the only paths here are the close
          *  button and Back. Unchecking everything is NOT an exit; it is the
          *  select-all button, and the mode stays up.
-         *  Disarms the Back callback, since there is nothing left here for it
-         *  to consume. */
+         *  setSelectionMode() syncs the Back callback itself. */
         fun exitSelectionMode() {
             if (!::adapter.isInitialized) return
             adapter.setSelectionMode(false)
-            syncBackCallback()
             updateSelectionBar()
         }
 
@@ -2103,7 +2101,14 @@ class ConfigurationFragment @JvmOverloads constructor(
 
             /** Turns the mode on (showing checkboxes on every row) or off
              *  (restoring the normal tap-to-activate rows and hiding the bar).
-             *  Turning it on checks nothing: the user starts from a clean slate. */
+             *  Turning it on checks nothing: the user starts from a clean slate.
+             *
+             *  The Back callback is synced HERE, not at the call sites. There
+             *  are three ways into the mode — the toolbar item, the bar's enter
+             *  button, and selectAll() turning it on implicitly — and arming at
+             *  each of them is how Back ended up dead on one of them. Mode state
+             *  and the Back callback are one concern, so they change together
+             *  in the one place the mode actually changes. */
             fun setSelectionMode(enabled: Boolean) {
                 if (selectionModeOn == enabled) return
                 selectionModeOn = enabled
@@ -2112,7 +2117,10 @@ class ConfigurationFragment @JvmOverloads constructor(
                 // which click listener each row gets, and that listener is
                 // installed in ConfigurationHolder.bind().
                 notifyDataSetChanged()
-                runOnMainDispatcher { updateSelectionBar() }
+                runOnMainDispatcher {
+                    syncBackCallback()
+                    updateSelectionBar()
+                }
             }
 
             /** Drops checks that are no longer on screen.
