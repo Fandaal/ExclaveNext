@@ -215,53 +215,110 @@ object GeoIpAnnotator {
         return if (idx >= 0) name.substring(idx) else ""
     }
 
-// Leading speed marker written by speedTest(): exactly one of the five
-    // allowed emoji ✨ ⭐️ 🏁 🏳️ 🏴, optionally followed by one or more numeric
-    // Mbps values (the repetition also heals legacy names where several values
-    // stacked, e.g. "🏁 24.7 23.9 24.0 0.0 <name>"). Written as an alternation,
-    // NOT a character class: Java regex classes match UTF-16 code units and
-    // break on supplementary-plane emoji, while \x{...} outside a class matches
-    // full code points. ⭐️/🏳️ may carry U+FE0F; 🏴 may carry the ZWJ pirate
-    // flag tail. A bare allowed emoji with no number is still stripped (dead
-    // proxy marker "🏴 <name>") — anything that is not one of these five emoji
-    // (e.g. a ⚡ belonging to the subscription name) is never touched.
+// Speed marker layout: a leading emoji from the fixed set, and the measured
+    // value as a TRAILING "↓<Mbps>" so it reads after the geo tag:
+    //   "🏁 🇷🇺 Russia (MTS) ↓22.2"
+    // An alternation, NOT a character class: Java regex classes match UTF-16 code
+    // units and break on supplementary-plane emoji, while \x{...} outside a class
+    // matches full code points. ⭐️/🏳️ may carry U+FE0F; 🏴 may carry the ZWJ
+    // pirate flag tail. Anything outside these five emoji (e.g. a ⚡ belonging to
+    // the subscription name) is never touched.
     private const val SPEED_EMOJI =
         "(?:\\x{2728}|\\x{2B50}\\uFE0F?|\\x{1F3C1}|\\x{1F3F3}\\uFE0F|\\x{1F3F4}(?:\\u200D\\x{2620}\\uFE0F)?)"
-    private val SPEED_MARKER_REGEX = Regex(
-        "^$SPEED_EMOJI(?:\\s+[0-9]+(?:\\.[0-9]+)?)*\\s+"
+
+    // The leading marker alone (no value follows it any more).
+    private val SPEED_EMOJI_PREFIX_REGEX = Regex("^$SPEED_EMOJI\\s*")
+
+    // Legacy layout from earlier builds: the value sat between emoji and name,
+    // and repeated runs could stack several values ("🏁 24.7 23.9 24.0 <name>").
+    private val LEGACY_SPEED_PREFIX_REGEX = Regex(
+        "^$SPEED_EMOJI(?:\\s+[0-9]+(?:\\.[0-9]+)?)+\\s+"
     )
 
+    // The trailing "↓<Mbps>", anchored to the end. Matching the tail ALONE (not
+    // from "^") is what makes this work: a pattern that starts at "^" and runs to
+    // "$" matches the WHOLE name, because ".*" swallows everything before the
+    // arrow — the name is then stripped to nothing.
+    private val SPEED_SUFFIX_REGEX = Regex("\\s*↓\\s*[0-9]+(?:\\.[0-9]+)?\\s*$")
+    private val SPEED_NUMBER_REGEX = Regex("[0-9]+(?:\\.[0-9]+)?")
+
     /**
-     * Return the leading speed marker of [name] normalised to at most ONE
-     * numeric value — "✨ 42.3 " — or just the emoji "🏴 " when no value is
-     * present. Legacy names with stacked values ("🏁 24.7 23.9 24.0") collapse
-     * to their first value so re-annotation heals them instead of propagating
-     * the pile.
+     * Strip the trailing ↓N value (the new layout) and any legacy leading
+     * values, leaving the leading emoji marker in place.
      */
-    fun speedMarkerOf(name: String): String {
-        val matched = SPEED_MARKER_REGEX.find(name)?.value ?: return ""
-        val head = matched.takeWhile { c -> !c.isDigit() && c != '.' }  // emoji + spaces
-        val num = Regex("[0-9]+(?:\\.[0-9]+)?").find(matched)?.value
-        return if (num != null) head.trimEnd() + " $num " else head
+    fun stripSpeedMarker(name: String): String {
+        val suffix = SPEED_SUFFIX_REGEX.find(name) ?: return stripLegacy(name)
+        // A "↓42.3" in a plain subscription name is not ours: only strip it when a
+        // leading marker emoji says this name is a speed-annotated one.
+        if (speedMarkerOf(name).isEmpty()) return stripLegacy(name)
+        return stripLegacy(name.substring(0, suffix.range.first))
     }
 
-    /** Strip the leading speed marker from [name]. */
-    fun stripSpeedMarker(name: String): String = name.replace(SPEED_MARKER_REGEX, "")
+    /** Drop the legacy leading "<emoji> <value(s)> " prefix, if present. */
+    private fun stripLegacy(name: String): String = name.replace(LEGACY_SPEED_PREFIX_REGEX, "")
+
+    /** Return the leading speed emoji, or "" when [name] carries no marker. */
+    fun speedMarkerOf(name: String): String =
+        SPEED_EMOJI_PREFIX_REGEX.find(name)?.value?.trimEnd() ?: ""
+
+    /**
+     * Cut a trailing "↓N" without requiring a leading marker. Needed for the
+     * geo tag, which is the name tail from the first flag and therefore has no
+     * marker of its own — stripSpeedMarker() would leave it untouched there.
+     */
+    private fun stripSpeedValue(name: String): String {
+        val suffix = SPEED_SUFFIX_REGEX.find(name) ?: return name
+        return name.substring(0, suffix.range.first)
+    }
+
+    /** Return the trailing ↓N value as written ("22.2"), or "" when absent. */
+    fun speedValueOf(name: String): String {
+        if (speedMarkerOf(name).isEmpty()) return ""
+        val suffix = SPEED_SUFFIX_REGEX.find(name) ?: return ""
+        return SPEED_NUMBER_REGEX.find(suffix.value)?.value ?: ""
+    }
+
+    /** Drop the leading speed emoji from [name], if present. */
+    private fun withoutSpeedEmoji(name: String): String =
+        name.replace(SPEED_EMOJI_PREFIX_REGEX, "").trim()
+
+    /**
+     * Build the display name for a speed test: strip whatever was there, then
+     * write [marker] at the front and [mbps] as the trailing value.
+     *
+     * Both parts are replaced on every run — a profile that speeds up gains the
+     * better emoji, one that dies loses its number — so annotations never stack.
+     * A null [mbps] (ping never passed) omits the arrow entirely.
+     */
+    fun composeSpeedName(name: String, marker: String, mbps: Double?): String {
+        val head = withoutSpeedEmoji(stripSpeedMarker(name))
+        val prefix = if (head.isEmpty()) "" else "$marker $head"
+        val value = mbps?.let { "↓$it" } ?: ""
+        return "$prefix $value".trim()
+    }
 
     /**
      * Carry a profile's geo/speed annotations from [oldName] onto a [freshName]
      * coming from a subscription refresh, so updating a subscription does not
      * wipe the user's annotations. Returns the fresh name wrapped with the old
-     * speed-marker prefix and geo-tag suffix (when present).
+     * speed marker and geo tag (when present), in the current "↓N" layout.
      */
     fun transferAnnotations(oldName: String, freshName: String): String {
-        val speed = speedMarkerOf(oldName)
-        val geo = geoTagOf(oldName)
+        val marker = speedMarkerOf(oldName)
+        // Legacy names carry the value next to the emoji, not in a ↓N tail.
+        val legacyValue = LEGACY_SPEED_PREFIX_REGEX.find(oldName)
+            ?.value?.let { SPEED_NUMBER_REGEX.find(it)?.value } ?: ""
+        val mbps = speedValueOf(oldName).ifEmpty { legacyValue }
+        // stripGeoTag() cuts from the first flag to the END OF STRING, so the
+        // ↓N tail has to be removed BEFORE the geo tag is taken — otherwise the
+        // value rides along inside it and gets re-appended a second time.
+        val geo = stripSpeedValue(geoTagOf(oldName)).trim()
         // Normalise the fresh name: drop any annotations it may already carry.
-        var base = stripSpeedMarker(stripGeoTag(freshName)).trim()
-        if (geo.isNotEmpty()) base = "$base ${geo.trim()}".trim()
-        if (speed.isNotEmpty()) base = "${speed.trim()} $base".trim()
-        return base
+        var base = withoutSpeedEmoji(stripSpeedMarker(stripGeoTag(freshName))).trim()
+        if (geo.isNotEmpty()) base = "$base $geo".trim()
+        val head = if (marker.isEmpty()) base else "$marker $base".trim()
+        val value = mbps.takeIf { it.isNotEmpty() }?.let { "↓$it" } ?: ""
+        return "$head $value".trim()
     }
 
         /** Replace the entire profile name with just the geo tag. */

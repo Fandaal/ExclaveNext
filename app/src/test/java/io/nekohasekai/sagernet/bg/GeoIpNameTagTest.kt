@@ -60,45 +60,145 @@ class GeoIpNameTagTest {
     }
 
     // --- speed marker --------------------------------------------------------
+    // Format: "<emoji> <name...> ↓<Mbps>" — the emoji stays a leading marker, the
+    // value moves to a trailing ↓N so it reads after the geo tag.
 
     @Test
-    fun stripSpeedMarkerRemovesTheLeadingMarker() {
-        assertEquals("My proxy", GeoIpAnnotator.stripSpeedMarker("\u2728 42.3 My proxy"))
+    fun stripSpeedMarkerRemovesTheTrailingValue() {
+        assertEquals(
+            "✨ 🇷🇺 Russia (MTS)",
+            GeoIpAnnotator.stripSpeedMarker("✨ 🇷🇺 Russia (MTS) ↓22.2"),
+        )
     }
 
     @Test
-    fun stripSpeedMarkerDropsStackedLegacyValues() {
-        // earlier builds appended a new number on every speed test
-        // ("🏁 24.7 23.9 24.0 <name>") — re-annotation has to collapse the pile.
-        assertEquals("My proxy", GeoIpAnnotator.stripSpeedMarker("\uD83C\uDFC1 24.7 23.9 24.0 My proxy"))
+    fun stripSpeedMarkerKeepsTheLeadingEmoji() {
+        // Only the ↓N tail is removed; the marker emoji belongs to the name.
+        assertEquals("🏁 My proxy", GeoIpAnnotator.stripSpeedMarker("🏁 My proxy ↓24.7"))
     }
 
     @Test
-    fun stripSpeedMarkerDropsABareEmoji() {
-        assertEquals("My proxy", GeoIpAnnotator.stripSpeedMarker("\uD83C\uDFF4 My proxy"))
+    fun stripSpeedMarkerRemovesLegacyLeadingValues() {
+        // Must still heal names written by earlier builds, which put the value
+        // right after the emoji ("🏁 24.7 23.9 24.0 <name>").
+        assertEquals("My proxy", GeoIpAnnotator.stripSpeedMarker("🏁 24.7 My proxy"))
+        assertEquals("My proxy", GeoIpAnnotator.stripSpeedMarker("🏁 24.7 23.9 24.0 My proxy"))
+    }
+
+    @Test
+    fun stripSpeedMarkerKeepsABareEmojiPrefix() {
+        // Under the current layout a bare emoji IS a valid marker: it means the
+        // profile is dead and had no measurable speed. Only the value is ours to
+        // strip — dropping the emoji here would erase dead/degraded markers.
+        assertEquals("🏴 My proxy", GeoIpAnnotator.stripSpeedMarker("🏴 My proxy"))
     }
 
     @Test
     fun stripSpeedMarkerLeavesUnrelatedEmojiAlone() {
         // ⚡ belongs to the subscription name, not to the speed test.
-        val name = "\u26A1 My proxy"
+        val name = "⚡ My proxy"
 
         assertEquals(name, GeoIpAnnotator.stripSpeedMarker(name))
     }
 
     @Test
-    fun speedMarkerOfNormalisesATemplateString() {
-        assertEquals("\u2728 42.3 ", GeoIpAnnotator.speedMarkerOf("\u2728 42.3 My proxy"))
+    fun stripSpeedMarkerLeavesAnUnrelatedArrowAlone() {
+        val name = "⚡ My proxy ↓42.3"
+
+        assertEquals(name, GeoIpAnnotator.stripSpeedMarker(name))
     }
 
     @Test
-    fun speedMarkerOfCollapsesStackedValuesToTheFirst() {
-        assertEquals("\uD83C\uDFC1 24.7 ", GeoIpAnnotator.speedMarkerOf("\uD83C\uDFC1 24.7 23.9 24.0 My proxy"))
+    fun speedMarkerOfReturnsTheLeadingEmoji() {
+        // No trailing space: the emoji itself, callers add the separator.
+        assertEquals("✨", GeoIpAnnotator.speedMarkerOf("✨ My proxy ↓42.3"))
     }
 
     @Test
     fun speedMarkerOfIsEmptyWithoutAMarker() {
-        assertEquals("", GeoIpAnnotator.speedMarkerOf("My proxy"))
+        assertEquals("", GeoIpAnnotator.speedMarkerOf("My proxy ↓42.3"))
+    }
+
+    @Test
+    fun speedValueOfReadsTheTrailingValue() {
+        assertEquals("22.2", GeoIpAnnotator.speedValueOf("✨ 🇷🇺 Russia (MTS) ↓22.2"))
+    }
+
+    @Test
+    fun speedValueOfHandlesZeroAndBareEmoji() {
+        assertEquals("0.0", GeoIpAnnotator.speedValueOf("🏴 My proxy ↓0.0"))
+    }
+
+    @Test
+    fun speedValueOfIsEmptyWithoutASuffix() {
+        assertEquals("", GeoIpAnnotator.speedValueOf("✨ My proxy"))
+    }
+
+    @Test
+    fun speedValueOfIsEmptyWhenTheArrowIsNotANumber() {
+        assertEquals("", GeoIpAnnotator.speedValueOf("✨ My proxy ↓fast"))
+    }
+
+    @Test
+    fun composeSpeedNamePutsTheValueAfterTheGeoTag() {
+        assertEquals(
+            "🏁 🇷🇺 Russia (MTS) ↓22.2",
+            GeoIpAnnotator.composeSpeedName("🏁 🇷🇺 Russia (MTS)", "🏁", 22.2),
+        )
+    }
+
+    @Test
+    fun composeSpeedNameWithZeroKeepsAnExplicitValue() {
+        assertEquals(
+            "🏴 🇷🇺 Russia (MTS) ↓0.0",
+            GeoIpAnnotator.composeSpeedName("🏴 🇷🇺 Russia (MTS)", "🏴", 0.0),
+        )
+    }
+
+    @Test
+    fun composeSpeedNameWithoutAValueOmitsTheArrow() {
+        // Dead profile: ping never passed, so there is no number to show.
+        assertEquals("🏴 My proxy", GeoIpAnnotator.composeSpeedName("🏴 My proxy", "🏴", null))
+    }
+
+    @Test
+    fun composeSpeedNameReplacesAPreviousValue() {
+        // Re-running a speed test overwrites, never stacks.
+        assertEquals(
+            "🏁 🇷🇺 Russia (MTS) ↓41.0",
+            GeoIpAnnotator.composeSpeedName("🏁 🇷🇺 Russia (MTS) ↓22.2", "🏁", 41.0),
+        )
+    }
+
+    @Test
+    fun composeSpeedNameHealsALegacyLeadingValue() {
+        assertEquals(
+            "🏁 🇷🇺 Russia (MTS) ↓22.2",
+            GeoIpAnnotator.composeSpeedName("🏁 22.2 🇷🇺 Russia (MTS)", "🏁", 22.2),
+        )
+    }
+
+    @Test
+    fun composeSpeedNameReplacesThePreviousEmoji() {
+        // A faster profile must pick up the ✨ marker, not keep the old 🏁.
+        assertEquals(
+            "✨ 🇷🇺 Russia (MTS) ↓61.4",
+            GeoIpAnnotator.composeSpeedName("🏁 🇷🇺 Russia (MTS) ↓22.2", "✨", 61.4),
+        )
+    }
+
+    @Test
+    fun composeSpeedNameReplacesEmojiWhenTheValueIsDropped() {
+        // Downgrade: 🏁 → 🏴 with no number at all.
+        assertEquals(
+            "🏴 🇷🇺 Russia (MTS)",
+            GeoIpAnnotator.composeSpeedName("🏁 🇷🇺 Russia (MTS) ↓22.2", "🏴", null),
+        )
+    }
+
+    @Test
+    fun composeSpeedNameKeepsTheBaseNameWithoutAGeoTag() {
+        assertEquals("🏁 My proxy ↓8.5", GeoIpAnnotator.composeSpeedName("🏁 My proxy", "🏁", 8.5))
     }
 
     // --- annotation ----------------------------------------------------------
@@ -132,18 +232,37 @@ class GeoIpNameTagTest {
 
     @Test
     fun transferAnnotationsCarriesBothMarkersOntoAFreshName() {
-        val old = "\u2728 42.3 Old (ISP) $sweden Sweden (Alexhost)"
+        val old = "✨ Old (ISP) $sweden Sweden (Alexhost) ↓42.3"
 
         assertEquals(
-            "\u2728 42.3 New (ISP) $sweden Sweden (Alexhost)",
+            "✨ New (ISP) $sweden Sweden (Alexhost) ↓42.3",
             GeoIpAnnotator.transferAnnotations(old, "New (ISP)"),
         )
     }
 
     @Test
     fun transferAnnotationsIsIdempotentAgainstANameThatAlreadyHasTags() {
-        val old = "\u2728 42.3 Base $sweden Sweden (Alexhost)"
+        val old = "✨ Base $sweden Sweden (Alexhost) ↓42.3"
 
         assertEquals(old, GeoIpAnnotator.transferAnnotations(old, old))
+    }
+
+    @Test
+    fun transferAnnotationsHealsALegacyLeadingValue() {
+        // Old build format: value directly after the emoji, before the geo tag.
+        val old = "✨ 42.3 Old (ISP) $sweden Sweden (Alexhost)"
+
+        assertEquals(
+            "✨ New (ISP) $sweden Sweden (Alexhost) ↓42.3",
+            GeoIpAnnotator.transferAnnotations(old, "New (ISP)"),
+        )
+    }
+
+    @Test
+    fun transferAnnotationsKeepsANameWithNoSpeedAtAll() {
+        assertEquals(
+            "New $sweden Sweden (Alexhost)",
+            GeoIpAnnotator.transferAnnotations("Base $sweden Sweden (Alexhost)", "New"),
+        )
     }
 }

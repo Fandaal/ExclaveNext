@@ -867,15 +867,17 @@ class ConfigurationFragment @JvmOverloads constructor(
         }
     }
 
-    // Multi-round counter. Two different denominators are in play, so both are shown
-    // explicitly instead of the old "56/122 (2/3)" which mixed them:
-    //   global — profiles whose FINAL verdict is known, out of the whole group.
-    //            Monotonic; this is what the progress bar shows.
+    // Multi-round counter. Three different quantities are in play, so each is shown
+    // with its own denominator instead of the old "56/122 (2/3)" which mixed them:
+    //   alive  — profiles that answered with a LIVE ping, out of the whole group.
+    //            A finished-but-dead profile is NOT counted here.
     //   round  — attempts made in the current round, out of the profiles that round
     //            started with. Moves on every attempt, including retries.
+    // "done" (final verdicts, alive or not) drives the progress bar only, since
+    // that is what makes it monotonic; it is not shown as a number.
     private fun updateTestCounter(
         dialog: AlertDialog,
-        done: Int,
+        alive: Int,
         total: Int,
         roundAttempt: Int,
         roundTotal: Int,
@@ -884,10 +886,10 @@ class ConfigurationFragment @JvmOverloads constructor(
     ) {
         val neutral = dialog.getButton(DialogInterface.BUTTON_NEUTRAL)
         neutral.text = if (rounds > 1) {
-            "$done/$total · $round/$rounds: $roundAttempt/$roundTotal"
+            "$alive/$total · $round/$rounds: $roundAttempt/$roundTotal"
         } else {
             // A single round makes the second pair pure noise.
-            "$done/$total"
+            "$alive/$total"
         }
     }
 
@@ -1081,6 +1083,11 @@ class ConfigurationFragment @JvmOverloads constructor(
             // Written from every worker at once — must be atomic.
             val finishedProfileCount = java.util.concurrent.atomic.AtomicInteger(0)
 
+            // Profiles that answered with a LIVE ping (status == 1), counted
+            // separately from "has a final verdict": a profile can be finished
+            // and still dead. This is what the first counter number shows.
+            val aliveProfileCount = java.util.concurrent.atomic.AtomicInteger(0)
+
             // Attempts made in the CURRENT round, and how many profiles that
             // round started with. Reset per round; the global counter above
             // keeps rising so the progress bar never jumps backwards.
@@ -1112,7 +1119,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
                 onMainDispatcher {
                     updateTestCounter(
-                        dialog, finishedProfileCount.get(), profileCount,
+                        dialog, aliveProfileCount.get(), profileCount,
                         roundDoneCount.get(), roundTotal, round, rounds
                     )
                 }
@@ -1174,6 +1181,9 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 profile.status = 1
                                 profile.ping = result
                                 profile.error = null
+                                // A live ping: counted once per profile, since a
+                                // profile that succeeds is never re-queued.
+                                aliveProfileCount.incrementAndGet()
                             } catch (e: PluginManager.PluginNotFoundException) {
                                 // Plugin missing — retrying won't help, don't re-queue.
                                 profile.status = -1
@@ -1210,7 +1220,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                                         )
                                     }
                                     updateTestCounter(
-                                        dialog, done, profileCount,
+                                        dialog, aliveProfileCount.get(), profileCount,
                                         roundAttempt, roundTotal, round, rounds
                                     )
                                 }
@@ -1220,7 +1230,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 // looks frozen while profiles are being retried.
                                 onMainDispatcher {
                                     updateTestCounter(
-                                        dialog, finishedProfileCount.get(), profileCount,
+                                        dialog, aliveProfileCount.get(), profileCount,
                                         roundAttempt, roundTotal, round, rounds
                                     )
                                 }
@@ -1403,30 +1413,29 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 profile.status = 1
                                 profile.ping = result.pingMs
                                 profile.error = "${result.downloadMbps} Mb/s"
-// Replace (never append) the speed marker + value in the name tag.
-                                // Uses the canonical SPEED_MARKER_REGEX from GeoIpAnnotator so
-                                // re-runs overwrite the previous value instead of stacking numbers.
-                                val bean = profile.requireBean()
+                                // Compose "<emoji> <name...> ↓<Mbps>" in one place, so
+                                // both the marker and the value are replaced on every
+                                // run and never stack. Re-running uses the canonical
+                                // GeoIpAnnotator helpers instead of its own regex.
                                 val marker = when {
-                                    // Ping passed but no bytes moved: black flag with an explicit 0.0
-                                    result.downloadMbps <= 0.0 -> "\uD83C\uDFF4"
-                                    result.downloadMbps >= 50 -> "\u2728"
-                                    result.downloadMbps >= 25 -> "\u2B50\uFE0F"
-                                    result.downloadMbps >= 10 -> "\uD83C\uDFC1"
-                                    else -> "\uD83C\uDFF3\uFE0F"
+                                    // Ping passed but no bytes moved: black flag, 0.0
+                                    result.downloadMbps <= 0.0 -> "🏴"
+                                    result.downloadMbps >= 50 -> "✨"
+                                    result.downloadMbps >= 25 -> "⭐️"
+                                    result.downloadMbps >= 10 -> "🏁"
+                                    else -> "🏳️"
                                 }
-                                val base = io.nekohasekai.sagernet.bg.GeoIpAnnotator
-                                    .stripSpeedMarker(bean.name ?: "")
-                                bean.name = "$marker ${result.downloadMbps} $base".trim()
+                                val bean = profile.requireBean()
+                                bean.name = io.nekohasekai.sagernet.bg.GeoIpAnnotator
+                                    .composeSpeedName(bean.name ?: "", marker, result.downloadMbps)
                                 profile.putBean(bean)
                             } else {
                                 profile.status = 3
                                 profile.error = "Dead"
                                 // Ping never passed: black flag WITHOUT a number.
                                 val bean = profile.requireBean()
-                                val base = io.nekohasekai.sagernet.bg.GeoIpAnnotator
-                                    .stripSpeedMarker(bean.name ?: "")
-                                bean.name = "\uD83C\uDFF4 $base".trim()
+                                bean.name = io.nekohasekai.sagernet.bg.GeoIpAnnotator
+                                    .composeSpeedName(bean.name ?: "", "🏴", null)
                                 profile.putBean(bean)
                             }
                         } catch (e: Exception) {
