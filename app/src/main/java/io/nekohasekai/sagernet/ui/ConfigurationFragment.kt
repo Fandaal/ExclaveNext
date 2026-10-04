@@ -100,7 +100,7 @@ class ConfigurationFragment @JvmOverloads constructor(
     PopupMenu.OnMenuItemClickListener,
     Toolbar.OnMenuItemClickListener {
 
-    // One callback for this screen, enabled whenever the search field has focus
+    // One callback for this screen, enabled whenever the search field is open
         // OR selection mode is on. Registered once, like the original code, so
         // there is nothing to re-arm.
         //
@@ -110,9 +110,7 @@ class ConfigurationFragment @JvmOverloads constructor(
         // handled here instead, where Back is already routed.
         val onBackPressedCallback = object : OnBackPressedCallback(enabled = false) {
             override fun handleOnBackPressed() {
-                val fragment = (childFragmentManager.findFragmentByTag(
-                    "f" + selectedGroup.id
-                ) as? GroupFragment)
+                val fragment = currentGroupFragment()
 
                 // Selection mode first: Back leaves the selection, and the
                 // search field is left alone.
@@ -121,23 +119,22 @@ class ConfigurationFragment @JvmOverloads constructor(
                     // callback (synchronously on the main thread): it stays
                     // armed while the search field is open, so the next Back
                     // collapses the search instead of finishing the activity.
-                    // Do NOT recompute isEnabled here: SearchView is a
-                    // ViewGroup, so isFocused stays false while its inner
-                    // editor holds the focus — that disarmed the callback and
-                    // sent the second Back to the launcher.
+                    // Do NOT recompute isEnabled here — the sync reads
+                    // SearchView.isIconified(), which does not change while a
+                    // selection is being exited.
                     fragment.exitSelectionMode()
                     return
                 }
 
                 searchView?.onActionViewCollapsed()
                 searchView?.clearFocus()
-                // Clear the proxy flag too, or it stays stuck true and keeps
-                // outranking selection mode for the rest of the session.
-                searchExpanded = false
                 // The query survives onActionViewCollapsed(), so clear it here —
                 // otherwise the fragment would keep showing the filtered bar with
                 // no search field visible to explain it.
                 searchView?.setQuery("", false)
+                // Collapsing the field just changed what this callback should do,
+                // so re-read the state: nothing is left to consume a Back press.
+                fragment?.syncBackCallback()
             }
         }
 
@@ -150,12 +147,20 @@ class ConfigurationFragment @JvmOverloads constructor(
     lateinit var groupPager: ViewPager2
     var searchView: SearchView? = null
 
-    // AndroidX SearchView exposes neither an "is expanded" getter nor
-    // expand/collapse listeners (those live on MenuItem, not on SearchView —
-    // checked against appcompat 1.8.0 with javap). Focus plus a non-empty
-    // query is what actually matters to the Back logic: that is exactly when
-    // the search callback must win over selection mode, and it is available.
-    var searchExpanded = false
+    // Whether the search field is currently on screen. Read straight from
+    // SearchView instead of tracking it by hand: isIconified() is public in
+    // appcompat (verified against 1.8.0 with javap) and is set false by
+    // onSearchClicked(), true by onActionViewCollapsed()/onCloseClicked().
+    // The previous hand-rolled proxy (focus OR non-empty query) needed three
+    // separate sync points and still went stale, which is what made Back
+    // unusable. Note this is NOT the same as isFocused: SearchView is a
+    // ViewGroup, so it is unfocused while its inner editor holds the focus.
+    val searchFieldOpen: Boolean get() = searchView?.isIconified == false
+
+    /** The GroupFragment for the tab in front of the user — the one the
+     *  Back callback and the selection bar both act on. */
+    private fun currentGroupFragment(): GroupFragment? = childFragmentManager
+        .findFragmentByTag("f" + selectedGroup.id) as? GroupFragment
     val selectedGroup get() = if (tabLayout.isGone && adapter.groupList.size > 0) adapter.groupList[0] else (if (adapter.groupList.size > 0 && tabLayout.selectedTabPosition > -1) adapter.groupList[tabLayout.selectedTabPosition] else ProxyGroup())
     val alwaysShowAddress by lazy { DataStore.alwaysShowAddress }
 
@@ -223,16 +228,13 @@ class ConfigurationFragment @JvmOverloads constructor(
                 return false
             }
         })
-        searchView?.setOnQueryTextFocusChangeListener { _, hasFocus ->
-            // Focus + a non-empty query is the usable proxy for "the search
-            // field is open": SearchView offers no getter and no listeners.
-            searchExpanded = hasFocus || !(searchView?.query.isNullOrEmpty() ?: true)
-            // One place decides whether this screen's Back callback is armed:
-            // selection mode counts too, so tapping into the list while
-            // filtering must not leave Back dead.
-            (childFragmentManager.findFragmentByTag(
-                "f" + selectedGroup.id
-            ) as? GroupFragment)?.syncBackCallback()
+        searchView?.setOnQueryTextFocusChangeListener { _, _ ->
+            // Nothing to compute or remember here: searchFieldOpen reads
+            // isIconified() on demand. The listener exists only because the
+            // field's open/closed state can change without any other call
+            // site of ours running (tapping the search icon, or the close
+            // button collapsing an empty field), and Back has to follow.
+            currentGroupFragment()?.syncBackCallback()
         }
         searchView?.let {
             // override onBackPressedCallback of MainActivity
@@ -1720,10 +1722,12 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         /** Arms this screen's single Back callback while it has something to do:
          *  an open search field, or selection mode. Called from the one place
-         *  selection mode changes, from the search filter/focus changes, and
-         *  after Back has consumed a press. */
+         *  selection mode changes, from the search focus changes, and after
+         *  Back has consumed a press. Both inputs are read from the live state
+         *  (searchFieldOpen / adapter.isSelectionMode), never from a flag this
+         *  screen has to remember. */
         fun syncBackCallback() {
-            val searchOpen = (parent as? ConfigurationFragment)?.searchExpanded ?: false
+            val searchOpen = (parent as? ConfigurationFragment)?.searchFieldOpen ?: false
             (parent as? ConfigurationFragment)?.onBackPressedCallback?.isEnabled =
                     isSelectionMode() || searchOpen
         }
