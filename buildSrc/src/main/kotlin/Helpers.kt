@@ -130,7 +130,6 @@ fun Project.setupAppCommon(projectName: String = "") {
             ndk.debugSymbolLevel = "NONE"
         }
         buildTypes.getByName("debug") {
-            applicationIdSuffix = "debug"
             isDebuggable = true
             isJniDebuggable = true
         }
