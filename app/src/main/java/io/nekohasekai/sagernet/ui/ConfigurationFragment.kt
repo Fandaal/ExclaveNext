@@ -117,10 +117,15 @@ class ConfigurationFragment @JvmOverloads constructor(
                 // Selection mode first: Back leaves the selection, and the
                 // search field is left alone.
                 if (fragment != null && fragment.isSelectionMode()) {
+                    // setSelectionMode(false) inside has already re-synced this
+                    // callback (synchronously on the main thread): it stays
+                    // armed while the search field is open, so the next Back
+                    // collapses the search instead of finishing the activity.
+                    // Do NOT recompute isEnabled here: SearchView is a
+                    // ViewGroup, so isFocused stays false while its inner
+                    // editor holds the focus — that disarmed the callback and
+                    // sent the second Back to the launcher.
                     fragment.exitSelectionMode()
-                    // Nothing left for this callback to do once the selection
-                    // is closed — unless the search field is still focused.
-                    isEnabled = (searchView?.isFocused ?: false)
                     return
                 }
 
