@@ -74,6 +74,9 @@ import io.nekohasekai.sagernet.widget.UndoSnackbarManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.zip.ZipInputStream
@@ -910,11 +913,22 @@ class ConfigurationFragment @JvmOverloads constructor(
         rounds: Int,
     ) {
         val neutral = dialog.getButton(DialogInterface.BUTTON_NEUTRAL)
+        // The alive count is the only number here that means "these answered
+        // with a live ping", so it wears the same green a live ping wears in
+        // the list below (material_green_500). Only the numerator: the
+        // denominator is the group size, not a result.
+        val aliveText = SpannableStringBuilder("$alive/$total")
+        // Not chained: setSpan() returns Unit, so it cannot be an append link.
+        aliveText.setSpan(
+            ForegroundColorSpan(requireContext().getColour(R.color.material_green_500)),
+            0, "$alive".length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
         neutral.text = if (rounds > 1) {
-            "$alive/$total · $round/$rounds: $roundAttempt/$roundTotal"
+            SpannableStringBuilder(aliveText)
+                .append(" · $round/$rounds: $roundAttempt/$roundTotal")
         } else {
             // A single round makes the second pair pure noise.
-            "$alive/$total"
+            aliveText
         }
     }
 
@@ -1142,6 +1156,11 @@ class ConfigurationFragment @JvmOverloads constructor(
                 roundDoneCount.set(0)
                 val roundTotal = roundList.size
 
+                // Which round the number on screen belongs to. A post queued on the
+                // main dispatcher before this bump still describes the PREVIOUS
+                // round, and rendering it would flash the fresh 0/N over the new
+                // round's first results. Older posts drop out here instead.
+                val currentRound = java.util.concurrent.atomic.AtomicInteger(round)
                 onMainDispatcher {
                     updateTestCounter(
                         dialog, aliveProfileCount.get(), profileCount,
@@ -1168,7 +1187,11 @@ class ConfigurationFragment @JvmOverloads constructor(
                             // Every attempt counts for the round counter, even when
                             // the profile gets re-queued — otherwise the round
                             // denominator would shrink as failures re-enter it.
-                            val roundAttempt = roundDoneCount.incrementAndGet()
+                            // Only the increment is needed: the number shown is read
+                            // at render time, not captured here. Capturing it here
+                            // is what made the count jump backwards, because a slow
+                            // probe's stale number would land after a fast one's.
+                            roundDoneCount.incrementAndGet()
                             workerStarts.add(SystemClock.elapsedRealtime() - testStartMs)
                             val now = inFlight.incrementAndGet()
                             // Not getAndUpdate(): that's API 24, and the legacy
@@ -1230,6 +1253,10 @@ class ConfigurationFragment @JvmOverloads constructor(
                             if (isFinal) {
                                 val done = finishedProfileCount.incrementAndGet()
                                 onMainDispatcher {
+                                    // A post from an earlier round describes numbers
+                                    // that are no longer on screen; drop it rather than
+                                    // paint a stale count over the new round.
+                                    if (currentRound.get() != round) return@onMainDispatcher
                                     test.binding.progressCircular.apply {
                                         isVisible = true
                                         // Shipped as android:indeterminate="true". Material does switch it to
@@ -1246,7 +1273,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                                     }
                                     updateTestCounter(
                                         dialog, aliveProfileCount.get(), profileCount,
-                                        roundAttempt, roundTotal, round, rounds
+                                        roundDoneCount.get(), roundTotal, round, rounds
                                     )
                                 }
                             } else {
@@ -1254,9 +1281,10 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 // the global count does not — otherwise the counter
                                 // looks frozen while profiles are being retried.
                                 onMainDispatcher {
+                                    if (currentRound.get() != round) return@onMainDispatcher
                                     updateTestCounter(
                                         dialog, aliveProfileCount.get(), profileCount,
-                                        roundAttempt, roundTotal, round, rounds
+                                        roundDoneCount.get(), roundTotal, round, rounds
                                     )
                                 }
                             }
