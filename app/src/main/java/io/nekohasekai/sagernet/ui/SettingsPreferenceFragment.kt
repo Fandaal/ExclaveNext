@@ -250,6 +250,44 @@ class SettingsPreferenceFragment : PreferenceFragmentCompat() {
             }
             true
         }
+
+        // Speed test settings
+        val speedMaxWorkers = findPreference<EditTextPreference>(Key.SPEED_MAX_WORKERS)!!
+        val speedTestTimeout = findPreference<EditTextPreference>(Key.SPEED_TEST_TIMEOUT)!!
+        val speedDlSizeMb = findPreference<EditTextPreference>(Key.SPEED_DL_SIZE_MB)!!
+        val speedDlTestUrls = findPreference<EditTextPreference>(Key.SPEED_DL_TEST_URLS)!!
+        speedMaxWorkers.setOnBindEditTextListener(EditTextPreferenceModifiers.Number)
+        speedTestTimeout.setOnBindEditTextListener(EditTextPreferenceModifiers.Number)
+        speedDlSizeMb.setOnBindEditTextListener(EditTextPreferenceModifiers.Number)
+        speedMaxWorkers.setOnPreferenceChangeListener { _, newValue ->
+            val value = (newValue as String).toIntOrNull()
+            if (value == null || value < 1) {
+                Toast.makeText(requireContext(), R.string.speed_test_threads_invalid, Toast.LENGTH_LONG).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
+        }
+        speedTestTimeout.setOnPreferenceChangeListener { _, newValue ->
+            val value = (newValue as String).toIntOrNull()
+            if (value == null || value < 1) {
+                Toast.makeText(requireContext(), R.string.speed_test_timeout_invalid, Toast.LENGTH_LONG).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
+        }
+        speedDlSizeMb.setOnPreferenceChangeListener { _, newValue ->
+            val value = (newValue as String).toIntOrNull()
+            if (value == null || value < 1) {
+                Toast.makeText(requireContext(), R.string.speed_test_dl_size_invalid, Toast.LENGTH_LONG).show()
+                return@setOnPreferenceChangeListener false
+            }
+            true
+        }
+        speedDlTestUrls.setOnPreferenceChangeListener { _, _ ->
+            // Any non-empty list is accepted: bad URLs simply fail as probes and
+            // the next one in the list is tried.
+            true
+        }
         enableVPNInterfaceIPv6Address.isEnabled = serviceMode.value == MODE_VPN
         enableVPNInterfaceIPv6Address.onPreferenceChangeListener = reloadListener
         allowAppsBypassVpn.isEnabled = serviceMode.value == MODE_VPN

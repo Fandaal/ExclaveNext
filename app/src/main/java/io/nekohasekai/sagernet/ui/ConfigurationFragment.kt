@@ -932,9 +932,12 @@ class ConfigurationFragment @JvmOverloads constructor(
         builder.append("$alive").setSpan(green, 0, "$alive".length, SPAN)
         builder.append("/$total")
         if (rounds > 1) {
-            builder.append(" • $round/$rounds • ")
+            builder.append(" • $round/$rounds • $roundAttempt/")
+            // Only the DENOMINATOR is red: it is the number of profiles this round
+            // still had to check, i.e. the ones that have not answered yet. The
+            // attempts count next to it is progress, not a failure.
             val start = builder.length
-            builder.append("$roundAttempt/$roundTotal")
+            builder.append("$roundTotal")
             builder.setSpan(red, start, builder.length, SPAN)
         }
         neutral.text = builder
@@ -1436,29 +1439,39 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         val mainJob = runOnDefaultDispatcher {
             val group = DataStore.currentGroup()
-            // Only test profiles that passed the URL test (status == 1), if any
-            // were tested; otherwise fall back to the whole group.
-            // With an explicit list (selection mode) the fallback stays inside
-            // that list, so the speed test never wanders outside the selection.
-            val all = (targets ?: SagerDatabase.proxyDao.getByGroup(group.id)).filter {
+            // Everything in the group/selection is probed, including profiles a
+            // previous round marked dead (🚩): they must get another chance on
+            // every re-run instead of silently dropping out of the pool. Only the
+            // browser-forwarder profiles are skipped (their transport can't be
+            // driven through a local SOCKS inbound).
+            val profiles = (targets ?: SagerDatabase.proxyDao.getByGroup(group.id)).filter {
                 !it.useBrowserForwarder()
             }
-            val tested = all.filter { it.status == 1 }
-            val profiles = if (tested.isNotEmpty()) tested else all
 
             val profileCount = profiles.size
             var finished = 0
 
             val pingUrl = "http://cp.cloudflare.com/"
-            val downloadUrl = "https://speed.cloudflare.com/__down?bytes=10485760"
+            // Configurable speed test parameters (Settings → Protocol), replacing
+            // the former hard-coded values: one worker, 5 s, a fixed 10 MB URL.
             val timeout = DataStore.connectionTestTimeout
-            val maxDuration = 5000L
+            val maxDuration = DataStore.speedTestTimeout.coerceAtLeast(1).toLong()
+            val sizeMb = DataStore.speedDlSizeMb.coerceAtLeast(1)
+            val downloadUrls = DataStore.speedDlTestUrls.split(';')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .map { url ->
+                    url.replace("{size}", (sizeMb * 1024 * 1024).toString())
+                        .replace("{size_mb}", sizeMb.toString())
+                }
+                .ifEmpty { listOf("https://speed.cloudflare.com/__down?bytes=${sizeMb * 1024 * 1024}") }
 
             val queue = ConcurrentLinkedQueue(profiles)
             val jobs = mutableListOf<Job>()
-            // Default to a single worker: parallel probes split the bandwidth and
-            // skew results. connectionTestConcurrency can raise it intentionally.
-            val workers = 1
+            // Single worker by default (parallel probes split the bandwidth and
+            // skew results); SPEED_MAX_WORKERS raises it when the user accepts
+            // the skew in exchange for throughput.
+            val workers = DataStore.speedMaxWorkers.coerceAtLeast(1)
             repeat(workers) {
                 jobs.add(launch {
                     while (isActive) {
@@ -1467,7 +1480,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                         test.insert(profile)
                         try {
                             val result = io.nekohasekai.sagernet.bg.test.SpeedTestInstance(
-                                profile, pingUrl, downloadUrl, timeout, maxDuration
+                                profile, pingUrl, downloadUrls, timeout, maxDuration
                             ).use { it.doTest() }
 
                             if (result.alive) {
@@ -1479,7 +1492,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 // run and never stack. Re-running uses the canonical
                                 // GeoIpAnnotator helpers instead of its own regex.
                                 val marker = when {
-                                    // Ping passed but no bytes moved: black flag, 0.0
+                                    // Ping passed but no bytes moved: black flag, no value.
                                     result.downloadMbps <= 0.0 -> "🏴"
                                     result.downloadMbps >= 50 -> "✨"
                                     result.downloadMbps >= 25 -> "⭐️"
@@ -1487,16 +1500,20 @@ class ConfigurationFragment @JvmOverloads constructor(
                                     else -> "🏳️"
                                 }
                                 val bean = profile.requireBean()
+                                // Zero downloads are dropped by composeSpeedName
+                                // itself — the rule lives in one place only.
                                 bean.name = io.nekohasekai.sagernet.bg.GeoIpAnnotator
                                     .composeSpeedName(bean.name ?: "", marker, result.downloadMbps)
                                 profile.putBean(bean)
                             } else {
                                 profile.status = 3
                                 profile.error = "Dead"
-                                // Ping never passed: black flag WITHOUT a number.
+                                // Ping never passed: triangular flag, no number. 🚩
+                                // (not the dead 🏴) so the profile stays distinct in the
+                                // list and still participates in future test rounds.
                                 val bean = profile.requireBean()
                                 bean.name = io.nekohasekai.sagernet.bg.GeoIpAnnotator
-                                    .composeSpeedName(bean.name ?: "", "🏴", null)
+                                    .composeSpeedName(bean.name ?: "", "🚩", null)
                                 profile.putBean(bean)
                             }
                         } catch (e: Exception) {

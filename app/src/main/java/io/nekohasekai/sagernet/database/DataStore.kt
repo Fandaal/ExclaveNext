@@ -285,6 +285,10 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var connectionTestConcurrency by configurationStore.stringToIntIfExists(Key.CONNECTION_TEST_CONCURRENCY) { CONNECTION_TEST_CONCURRENCY }
     var connectionTestTimeout by configurationStore.stringToIntIfExists(Key.CONNECTION_TEST_TIMEOUT) { CONNECTION_TEST_TIMEOUT }
     var connectionTestRounds by configurationStore.stringToIntIfExists(Key.CONNECTION_TEST_ROUNDS) { CONNECTION_TEST_ROUNDS }
+    var speedMaxWorkers by configurationStore.stringToIntIfExists(Key.SPEED_MAX_WORKERS) { SPEED_MAX_WORKERS }
+    var speedTestTimeout by configurationStore.stringToIntIfExists(Key.SPEED_TEST_TIMEOUT) { SPEED_TEST_TIMEOUT.toInt() }
+    var speedDlSizeMb by configurationStore.stringToIntIfExists(Key.SPEED_DL_SIZE_MB) { SPEED_DL_SIZE_MB }
+    var speedDlTestUrls by configurationStore.string(Key.SPEED_DL_TEST_URLS) { SPEED_DL_TEST_URLS }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
     var showGroupName by configurationStore.boolean(Key.SHOW_GROUP_NAME)
 

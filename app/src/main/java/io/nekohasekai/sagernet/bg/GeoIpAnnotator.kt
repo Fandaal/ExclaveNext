@@ -221,10 +221,14 @@ object GeoIpAnnotator {
     // An alternation, NOT a character class: Java regex classes match UTF-16 code
     // units and break on supplementary-plane emoji, while \x{...} outside a class
     // matches full code points. ⭐️/🏳️ may carry U+FE0F; 🏴 may carry the ZWJ
-    // pirate flag tail. Anything outside these five emoji (e.g. a ⚡ belonging to
+    // pirate flag tail. Anything outside these emoji (e.g. a ⚡ belonging to
     // the subscription name) is never touched.
+    // 🚩 (U+1F6A9) marks a profile whose ping never passed. It MUST be listed
+    // here: composeSpeedName() strips the previous marker by this same
+    // alternation, so a marker missing from it would never be replaced and the
+    // annotations would stack ("🚩 🏴 <name>") on every re-run.
     private const val SPEED_EMOJI =
-        "(?:\\x{2728}|\\x{2B50}\\uFE0F?|\\x{1F3C1}|\\x{1F3F3}\\uFE0F|\\x{1F3F4}(?:\\u200D\\x{2620}\\uFE0F)?)"
+        "(?:\\x{2728}|\\x{2B50}\\uFE0F?|\\x{1F3C1}|\\x{1F3F3}\\uFE0F|\\x{1F3F4}(?:\\u200D\\x{2620}\\uFE0F)?|\\x{1F6A9})"
 
     // The leading marker alone (no value follows it any more).
     private val SPEED_EMOJI_PREFIX_REGEX = Regex("^$SPEED_EMOJI\\s*")
@@ -288,12 +292,14 @@ object GeoIpAnnotator {
      *
      * Both parts are replaced on every run — a profile that speeds up gains the
      * better emoji, one that dies loses its number — so annotations never stack.
-     * A null [mbps] (ping never passed) omits the arrow entirely.
+     * A null [mbps] (ping never passed) omits the arrow entirely, and so does a
+     * measured zero: "↓0.0" is noise, the bare marker already says it. This is
+     * the ONE place that rule lives — callers pass the raw measurement.
      */
     fun composeSpeedName(name: String, marker: String, mbps: Double?): String {
         val head = withoutSpeedEmoji(stripSpeedMarker(name))
         val prefix = if (head.isEmpty()) "" else "$marker $head"
-        val value = mbps?.let { "↓$it" } ?: ""
+        val value = mbps?.takeIf { it > 0.0 }?.let { "↓$it" } ?: ""
         return "$prefix $value".trim()
     }
 
@@ -308,7 +314,11 @@ object GeoIpAnnotator {
         // Legacy names carry the value next to the emoji, not in a ↓N tail.
         val legacyValue = LEGACY_SPEED_PREFIX_REGEX.find(oldName)
             ?.value?.let { SPEED_NUMBER_REGEX.find(it)?.value } ?: ""
-        val mbps = speedValueOf(oldName).ifEmpty { legacyValue }
+        // A stored "0.0" is dropped rather than carried: a zero measurement is
+        // expressed by the bare marker (composeSpeedName rule), so transferring
+        // it would resurrect "↓0.0" on the fresh name.
+        val mbps = (speedValueOf(oldName).ifEmpty { legacyValue })
+            .takeIf { it.isNotEmpty() && it.toDoubleOrNull() != 0.0 }
         // stripGeoTag() cuts from the first flag to the END OF STRING, so the
         // ↓N tail has to be removed BEFORE the geo tag is taken — otherwise the
         // value rides along inside it and gets re-appended a second time.
@@ -317,7 +327,7 @@ object GeoIpAnnotator {
         var base = withoutSpeedEmoji(stripSpeedMarker(stripGeoTag(freshName))).trim()
         if (geo.isNotEmpty()) base = "$base $geo".trim()
         val head = if (marker.isEmpty()) base else "$marker $base".trim()
-        val value = mbps.takeIf { it.isNotEmpty() }?.let { "↓$it" } ?: ""
+        val value = mbps?.let { "↓$it" } ?: ""
         return "$head $value".trim()
     }
 

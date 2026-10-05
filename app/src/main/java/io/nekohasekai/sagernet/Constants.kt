@@ -24,6 +24,15 @@ const val CONNECTION_TEST_CONCURRENCY = 6
 const val CONNECTION_TEST_TIMEOUT = 5000
 const val CONNECTION_TEST_ROUNDS = 1
 
+// Speed test defaults. The download URLs are templates: the first must contain
+// "{size}" (replaced with SPEED_DL_SIZE_MB * 1024 * 1024), the second uses the
+// "{size_mb}" shorthand for the MB-denominated mirrors. A URL without either
+// placeholder is used as-is.
+const val SPEED_MAX_WORKERS = 1
+const val SPEED_TEST_TIMEOUT = 5000L
+const val SPEED_DL_SIZE_MB = 10
+const val SPEED_DL_TEST_URLS = "https://speed.cloudflare.com/__down?bytes={size};http://ipv4.download.thinkbroadband.com/{size_mb}MB.zip"
+
 object Key {
 
     const val DB_PUBLIC = "configuration.db"
@@ -92,6 +101,10 @@ object Key {
     const val CONNECTION_TEST_CONCURRENCY = "connectionTestConcurrency"
     const val CONNECTION_TEST_TIMEOUT = "connectionTestTimeout"
     const val CONNECTION_TEST_ROUNDS = "connectionTestRounds"
+    const val SPEED_MAX_WORKERS = "speedMaxWorkers"
+    const val SPEED_TEST_TIMEOUT = "speedTestTimeout"
+    const val SPEED_DL_SIZE_MB = "speedDlSizeMb"
+    const val SPEED_DL_TEST_URLS = "speedDlTestUrls"
     const val PROBE_URL = "probeUrl"
     const val PROBE_INTERVAL = "probeInterval"
 

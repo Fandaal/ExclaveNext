@@ -244,6 +244,31 @@
             app:key="connectionTestRounds"
             app:title="@string/connection_test_rounds"
             app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="1"
+            app:icon="@drawable/ic_baseline_multiple_stop_24"
+            app:key="speedMaxWorkers"
+            app:title="@string/speed_test_threads"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="5000"
+            app:icon="@drawable/ic_baseline_shutter_speed_24"
+            app:key="speedTestTimeout"
+            app:title="@string/speed_test_timeout"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="10"
+            app:icon="@drawable/ic_baseline_speed_24"
+            app:key="speedDlSizeMb"
+            app:title="@string/speed_test_dl_size"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="@string/speed_dl_test_urls_default"
+            app:icon="@drawable/ic_baseline_link_24"
+            app:key="speedDlTestUrls"
+            app:singleLineTitle="false"
+            app:title="@string/speed_test_dl_urls"
+            app:useSimpleSummaryProvider="true" />
         <SwitchPreference
             app:icon="@drawable/baseline_construction_24"
             app:key="realityDisableX25519Mlkem768"

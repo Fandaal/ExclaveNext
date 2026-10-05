@@ -148,16 +148,34 @@ class GeoIpNameTagTest {
     }
 
     @Test
-    fun composeSpeedNameWithZeroKeepsAnExplicitValue() {
+    fun composeSpeedNameWithZeroKeepsTheMarkerButNoValue() {
+        // A zero download is written as the bare 🏴 marker: "↓0.0" is noise.
         assertEquals(
-            "🏴 🇷🇺 Russia (MTS) ↓0.0",
+            "🏴 🇷🇺 Russia (MTS)",
             GeoIpAnnotator.composeSpeedName("🏴 🇷🇺 Russia (MTS)", "🏴", 0.0),
         )
     }
 
     @Test
+    fun composeSpeedNameOmitsTheArrowWhenTheMarkerIsTheDeadTriangularFlag() {
+        // Ping never passed: 🚩, no number — distinct from the alive-but-zero 🏴.
+        assertEquals("🚩 My proxy", GeoIpAnnotator.composeSpeedName("🚩 My proxy", "🚩", null))
+    }
+
+    @Test
+    fun composeSpeedNameReplacesAPreviousZeroValue() {
+        // A re-run that still measures zero must not resurrect "↓0.0".
+        assertEquals(
+            "🏴 My proxy",
+            GeoIpAnnotator.composeSpeedName("🏴 My proxy ↓0.0", "🏴", 0.0),
+        )
+    }
+
+    @Test
     fun composeSpeedNameWithoutAValueOmitsTheArrow() {
-        // Dead profile: ping never passed, so there is no number to show.
+        // Dead profile: ping never passed, so there is no number to show. The
+        // marker passed in is whatever the caller decided; here 🏴 still shows
+        // a bare marker with no value.
         assertEquals("🏴 My proxy", GeoIpAnnotator.composeSpeedName("🏴 My proxy", "🏴", null))
     }
 
@@ -254,6 +272,19 @@ class GeoIpNameTagTest {
 
         assertEquals(
             "✨ New (ISP) $sweden Sweden (Alexhost) ↓42.3",
+            GeoIpAnnotator.transferAnnotations(old, "New (ISP)"),
+        )
+    }
+
+    @Test
+    fun transferAnnotationsDropsAStoredZeroValue() {
+        // "↓0.0" must not ride onto the fresh name: a zero measurement is the
+        // bare marker's job (composeSpeedName rule), and resurrecting the value
+        // here would undo it on every subscription refresh.
+        val old = "🏴 Old (ISP) $sweden Sweden (Alexhost) ↓0.0"
+
+        assertEquals(
+            "🏴 New (ISP) $sweden Sweden (Alexhost)",
             GeoIpAnnotator.transferAnnotations(old, "New (ISP)"),
         )
     }

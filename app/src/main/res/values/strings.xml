@@ -86,10 +86,19 @@
     <string name="require_transproxy">Enable transparent proxy inbound</string>
     <string name="transproxy_mode">Transparent proxy mode</string>
     <string name="connection_test_url">Connection test URL</string>
-    <string name="connection_test_custom_concurrency">URL test concurrency</string>
+    <string name="connection_test_custom_concurrency">Connection test threads</string>
     <string name="connection_test_custom_concurrency_invalid">Concurrency must be a positive integer</string>
-    <string name="connection_test_custom_timeout">URL test timeout (ms)</string>
+    <string name="connection_test_custom_timeout">Connection test timeout (ms)</string>
     <string name="connection_test_rounds">URL test rounds</string>
+    <string name="speed_test_threads">Speed test threads</string>
+    <string name="speed_test_threads_invalid">Speed test threads must be a positive integer</string>
+    <string name="speed_test_timeout">Speed test timeout (ms)</string>
+    <string name="speed_test_timeout_invalid">Speed test timeout must be a positive integer</string>
+    <string name="speed_test_dl_size">Speed test download size (MB)</string>
+    <string name="speed_test_dl_size_invalid">Download size must be a positive integer</string>
+    <string name="speed_test_dl_urls">Speed test download URLs</string>
+    <string name="speed_test_dl_urls_sum">Semicolon-separated list, tried in order. {size} is replaced with the size in bytes, {size_mb} with the size in MB. Both placeholders are optional.</string>
+    <string name="speed_dl_test_urls_default" translatable="false">https://speed.cloudflare.com/__down?bytes={size};http://ipv4.download.thinkbroadband.com/{size_mb}MB.zip</string>
     <string name="action_annotate_geoip">Annotate country / ISP</string>
     <string name="action_speed_test">Speed test</string>
     <string name="geoip_db_missing">GeoLite2 databases not found. Download them from Route \u2192 Assets, or annotation will use the online API only.</string>

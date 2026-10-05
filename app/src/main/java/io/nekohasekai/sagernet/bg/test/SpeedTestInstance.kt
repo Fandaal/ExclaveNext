@@ -43,11 +43,15 @@ data class SpeedResult(
  * Starts [profile] as a local SOCKS proxy via the core, then measures latency
  * and download throughput through it. One instance per profile; call [doTest]
  * inside `use { }` so the core is always torn down.
+ *
+ * @param downloadUrls tried in order; the first that yields at least one byte
+ *   wins, the rest are fallbacks for when a mirror is unreachable from this
+ *   proxy.
  */
 class SpeedTestInstance(
     profile: ProxyEntity,
     private val pingUrl: String,
-    private val downloadUrl: String,
+    private val downloadUrls: List<String>,
     private val timeoutMs: Int,
     private val maxDurationMs: Long,
 ) : V2RayInstance(profile) {
@@ -137,25 +141,33 @@ class SpeedTestInstance(
         }
 
         // --- download ---
+        // Try the URLs in order: a mirror that is unreachable (or resets mid-way)
+        // from this proxy must not zero the measurement — the next one is tried.
+        // Any bytes read from any URL count; the loop breaks on the first URL
+        // that yields at least one byte.
         var downloaded = 0L
         val dlStart = System.currentTimeMillis()
-        try {
-            val conn = URL(downloadUrl).openConnection(proxy()) as HttpURLConnection
-            conn.connectTimeout = timeoutMs
-            conn.readTimeout = timeoutMs
-            conn.connect()
-            conn.inputStream.use { input ->
-                val buf = ByteArray(65536)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    downloaded += n
-                    if (System.currentTimeMillis() - dlStart >= maxDurationMs) break
+        for (url in downloadUrls) {
+            if (downloaded > 0) break
+            if (System.currentTimeMillis() - dlStart >= maxDurationMs) break
+            try {
+                val conn = URL(url).openConnection(proxy()) as HttpURLConnection
+                conn.connectTimeout = timeoutMs
+                conn.readTimeout = timeoutMs
+                conn.connect()
+                conn.inputStream.use { input ->
+                    val buf = ByteArray(65536)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        downloaded += n
+                        if (System.currentTimeMillis() - dlStart >= maxDurationMs) break
+                    }
                 }
+                conn.disconnect()
+            } catch (_: Exception) {
+                // Partial download still counts toward the average; try the next URL.
             }
-            conn.disconnect()
-        } catch (_: Exception) {
-            // Partial download still counts toward the average.
         }
         val elapsedSec = (System.currentTimeMillis() - dlStart) / 1000.0
         val mbps = if (elapsedSec > 0) (downloaded * 8.0) / (1024 * 1024) / elapsedSec else 0.0
