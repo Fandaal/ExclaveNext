@@ -86,6 +86,10 @@ import io.nekohasekai.sagernet.fmt.internal.BalancerBean
 import io.nekohasekai.sagernet.fmt.internal.ChainBean
 import io.nekohasekai.sagernet.utils.FormatFileSizeCompat
 
+// Short alias for the span flag used on the test counter; spelled out three
+// times per render otherwise.
+private const val SPAN = Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+
 @android.annotation.SuppressLint("ClickableViewAccessibility")
 fun View.suppressDragWhilePressed(setPressed: (Boolean) -> Unit) {
     setOnTouchListener { _, event ->
@@ -898,9 +902,12 @@ class ConfigurationFragment @JvmOverloads constructor(
     // Multi-round counter. Three different quantities are in play, so each is shown
     // with its own denominator instead of the old "56/122 (2/3)" which mixed them:
     //   alive  — profiles that answered with a LIVE ping, out of the whole group.
-    //            A finished-but-dead profile is NOT counted here.
+    //            A finished-but-dead profile is NOT counted here. Green, like a
+    //            live ping in the list below.
     //   round  — attempts made in the current round, out of the profiles that round
     //            started with. Moves on every attempt, including retries.
+    //   the last pair counts the dead ones, so it wears the red that "unavailable"
+    //            wears in the list below (material_red_500).
     // "done" (final verdicts, alive or not) drives the progress bar only, since
     // that is what makes it monotonic; it is not shown as a number.
     private fun updateTestCounter(
@@ -913,23 +920,24 @@ class ConfigurationFragment @JvmOverloads constructor(
         rounds: Int,
     ) {
         val neutral = dialog.getButton(DialogInterface.BUTTON_NEUTRAL)
-        // The alive count is the only number here that means "these answered
-        // with a live ping", so it wears the same green a live ping wears in
-        // the list below (material_green_500). Only the numerator: the
-        // denominator is the group size, not a result.
-        val aliveText = SpannableStringBuilder("$alive/$total")
-        // Not chained: setSpan() returns Unit, so it cannot be an append link.
-        aliveText.setSpan(
-            ForegroundColorSpan(requireContext().getColour(R.color.material_green_500)),
-            0, "$alive".length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        val green = ForegroundColorSpan(
+            requireContext().getColour(R.color.material_green_500)
         )
-        neutral.text = if (rounds > 1) {
-            SpannableStringBuilder(aliveText)
-                .append(" · $round/$rounds: $roundAttempt/$roundTotal")
-        } else {
-            // A single round makes the second pair pure noise.
-            aliveText
+        val red = ForegroundColorSpan(
+            requireContext().getColour(R.color.material_red_500)
+        )
+        val builder = SpannableStringBuilder()
+        // Span over the numerator only: the denominators are group/round sizes,
+        // not results, so they keep the default colour.
+        builder.append("$alive").setSpan(green, 0, "$alive".length, SPAN)
+        builder.append("/$total")
+        if (rounds > 1) {
+            builder.append(" • $round/$rounds • ")
+            val start = builder.length
+            builder.append("$roundAttempt/$roundTotal")
+            builder.setSpan(red, start, builder.length, SPAN)
         }
+        neutral.text = builder
     }
 
     inner class TestDialog {
