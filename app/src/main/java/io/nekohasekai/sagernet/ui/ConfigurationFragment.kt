@@ -746,6 +746,9 @@ class ConfigurationFragment @JvmOverloads constructor(
             R.id.action_annotate_geoip -> {
                 annotateGeoip()
             }
+            R.id.action_resolve_domains -> {
+                resolveDomains()
+            }
             R.id.action_speed_test -> {
                 speedTest()
             }
@@ -1426,6 +1429,97 @@ class ConfigurationFragment @JvmOverloads constructor(
         }
     }
 
+    // --- Exclave Next: resolve domain names in configs to IP ----------------
+    // Replaces bean.serverAddress with the resolved IP where it holds a domain.
+    // Purely a rewrite of the stored config: profiles from subscriptions keep
+    // their sourceId, so the next subscription refresh may still reconcile
+    // them by address+port+type and re-add the domain — the user asked for the
+    // rewrite without worrying about that linkage.
+    @Suppress("EXPERIMENTAL_API_USAGE")
+    fun resolveDomains(targets: List<ProxyEntity>? = null) {
+        val test = TestDialog()
+        val dialog = test.builder.show()
+        dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
+
+        val mainJob = runOnDefaultDispatcher {
+            val group = DataStore.currentGroup()
+            // Selection mode passes the checked profiles; the toolbar entry
+            // point passes nothing and gets the whole group.
+            val profiles = targets ?: SagerDatabase.proxyDao.getByGroup(group.id)
+            val profileCount = profiles.size
+            var finished = 0
+            var resolved = 0
+
+            val queue = ConcurrentLinkedQueue(profiles)
+            val jobs = mutableListOf<Job>()
+            // DNS is IO-bound; reuse the connection-test worker count.
+            repeat(DataStore.connectionTestConcurrency.coerceAtLeast(1)) {
+                jobs.add(launch {
+                    while (isActive) {
+                        val profile = queue.poll() ?: break
+                        profile.status = 0
+                        test.insert(profile)
+                        try {
+                            val bean = profile.requireBean()
+                            val host = bean.serverAddress ?: ""
+                            if (host.isEmpty()) {
+                                profile.status = 3
+                                profile.error = "No server address"
+                            } else {
+                                val ip = io.nekohasekai.sagernet.bg.GeoIpAnnotator.resolveToIp(host)
+                                if (ip == null) {
+                                    profile.status = 3
+                                    profile.error = "DNS error"
+                                } else if (ip != host) {
+                                    // A domain turned into an IP: write it back.
+                                    bean.serverAddress = ip
+                                    profile.putBean(bean)
+                                    profile.status = 1
+                                    profile.error = "$host → $ip"
+                                    resolved++
+                                } else {
+                                    // Already an IP — nothing to do.
+                                    profile.status = 1
+                                    profile.error = null
+                                }
+                            }
+                        } catch (e: Exception) {
+                            profile.status = 3
+                            profile.error = e.readableMessage
+                        }
+                        onMainDispatcher {
+                            finished++
+                            test.binding.progressCircular.apply {
+                                isVisible = true
+                                setProgressCompat(
+                                    ((finished.toDouble() / profileCount.toDouble()) * 100).toInt(),
+                                    true
+                                )
+                            }
+                            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
+                                "$finished/$profileCount"
+                        }
+                        test.update(profile)
+                        ProfileManager.updateProfile(profile)
+                    }
+                })
+            }
+            jobs.joinAll()
+            test.close()
+            onMainDispatcher {
+                test.binding.progressCircular.isGone = true
+                dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setText(android.R.string.ok)
+                snackbar(getString(R.string.resolve_done, resolved, profileCount)).show()
+            }
+        }
+        test.cancel = {
+            mainJob.cancel()
+            runOnDefaultDispatcher {
+                GroupManager.postReload(DataStore.currentGroupId())
+            }
+        }
+    }
+
     // --- Exclave Next: speed test of the current group ----------------------
     // Starts each profile as a local SOCKS proxy (via the core) and measures
     // ping + download. Low concurrency by default so probes don't share the
@@ -1852,6 +1946,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                         withSelection { runOnDefaultDispatcher { requirePrent().urlTest(it) } }
                     R.id.action_selection_annotate_geoip ->
                         withSelection { requirePrent().annotateGeoip(it) }
+                    R.id.action_selection_resolve_domains ->
+                        withSelection { requirePrent().resolveDomains(it) }
                     R.id.action_selection_speed_test ->
                         withSelection { requirePrent().speedTest(it) }
                     R.id.action_selection_clear_test_results ->
