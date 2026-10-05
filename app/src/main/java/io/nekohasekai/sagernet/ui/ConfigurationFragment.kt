@@ -48,6 +48,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
@@ -2371,7 +2372,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                     val isSelected = (entityId == activeSelectionId)
                     val isStarted = isSelected && SagerNet.started && DataStore.startedProfile == entityId
 
-                    holder.selectedView.visibility = if (isSelected) View.VISIBLE else View.INVISIBLE
+                    holder.setActiveHighlight(isSelected)
                     holder.deleteButton.isEnabled = !isStarted
                 } else {
                     super.onBindViewHolder(holder, position, payloads)
@@ -2590,7 +2591,7 @@ class ConfigurationFragment @JvmOverloads constructor(
             val profileStatus: TextView = view.findViewById(R.id.profile_status)
 
             val trafficText: TextView = view.findViewById(R.id.traffic_text)
-            val selectedView: LinearLayout = view.findViewById(R.id.selected_view)
+            val card: MaterialCardView = view as MaterialCardView
             val editButton: ImageView = view.findViewById(R.id.edit)
             val shareLayout: LinearLayout = view.findViewById(R.id.share)
             val shareLayer: LinearLayout = view.findViewById(R.id.share_layer)
@@ -2607,6 +2608,19 @@ class ConfigurationFragment @JvmOverloads constructor(
                 selectionBox.isVisible = inSelection
                 if (inSelection) {
                     selectionBox.isChecked = adapter.isChecked(entity.id)
+                }
+            }
+
+            /** Active-profile highlight: a thin stroke around the card instead
+             *  of the old 4dp left stripe (2dp now, and it wraps the whole row).
+             *  Same theme colour the stripe used, so light/dark themes keep
+             *  working unchanged. */
+            fun setActiveHighlight(active: Boolean) {
+                if (active) {
+                    card.setStrokeColor(view.context.getColorAttr(R.attr.selectedColorPrimary))
+                    card.strokeWidth = dp2px(2)
+                } else {
+                    card.strokeWidth = 0
                 }
             }
 
@@ -2756,7 +2770,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                     val started = selected && SagerNet.started && DataStore.startedProfile == proxyEntity.id
                     onMainDispatcher {
                         deleteButton.isEnabled = !started
-                        selectedView.visibility = if (selected) View.VISIBLE else View.INVISIBLE
+                        setActiveHighlight(selected)
                     }
 
                     fun showShare(anchor: View) {
