@@ -2347,8 +2347,21 @@ class ConfigurationFragment @JvmOverloads constructor(
                 runOnMainDispatcher { updateSelectionBar() }
             }
 
+            /** The profile this screen treats as active. Single source of truth for both
+             *  the bind-time highlight and the payload fast-path. `selectedItem`
+             *  wins because in select-mode that IS the active one; everywhere
+             *  else it is null and the global selection applies. refreshSelection()
+             *  used to read DataStore.selectedProxy directly while reloadProfiles()
+             *  resolved it the same way as here — the two could disagree. */
+            private val currentActiveId: Long
+                get() = try {
+                    requirePrent().selectedItem?.id ?: DataStore.selectedProxy
+                } catch (ignored: IllegalStateException) {
+                    DataStore.selectedProxy
+                }
+
             fun refreshSelection() {
-                val newId = DataStore.selectedProxy
+                val newId = currentActiveId
                 if (activeSelectionId == newId) return
                 val oldId = activeSelectionId
                 activeSelectionId = newId
@@ -2369,11 +2382,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                 } else if (payloads.contains("PAYLOAD_SELECTION_CHANGE")) {
                     val entityId = configurationIdList[position]
 
-                    val isSelected = (entityId == activeSelectionId)
-                    val isStarted = isSelected && SagerNet.started && DataStore.startedProfile == entityId
-
-                    holder.setActiveHighlight(isSelected)
-                    holder.deleteButton.isEnabled = !isStarted
+                    holder.bindActiveState(entityId)
                 } else {
                     super.onBindViewHolder(holder, position, payloads)
                 }
@@ -2533,6 +2542,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                     return
                 }
 
+                // Same resolution as currentActiveId — set here so a bind that
+                // lands before the next refreshSelection() paints correctly.
                 activeSelectionId = selectedItem?.id ?: DataStore.selectedProxy
 
                 var newProfiles = SagerDatabase.proxyDao.getByGroup(proxyGroup.id)
@@ -2622,6 +2633,32 @@ class ConfigurationFragment @JvmOverloads constructor(
                 } else {
                     card.strokeWidth = 0
                 }
+            }
+
+            /** Applies everything that depends on WHICH profile is the active
+             *  one — the card outline and whether the row may be deleted while
+             *  the service is running it. Both are read from activeSelectionId
+             *  right here, on the main thread, so a bind can never paint a
+             *  state that was already superseded.
+             *
+             *  This is the ONLY place these two are written. Both the payload
+             *  fast-path and the full bind route through it, which is what
+             *  keeps the highlight from flickering on the previously selected
+             *  row — see the comment at the bind() call site for the race this
+             *  replaces. */
+            fun bindActiveState(entityId: Long) {
+                // `adapter` here is the GroupFragment's own ConfigurationAdapter
+                // (this holder is an inner class of the fragment, not of the
+                // adapter), hence the explicit qualifier.
+                val isActive = entityId == adapter.activeSelectionId
+                setActiveHighlight(isActive)
+                // The running profile must not be deletable; the started check
+                // reads SagerNet/DataStore state, which is cheap enough here
+                // (SharedPreferences is memory-cached) and, more importantly,
+                // belongs to the same atomic read as the highlight.
+                val isStarted = isActive && SagerNet.started &&
+                        DataStore.startedProfile == entityId
+                deleteButton.isEnabled = !isStarted
             }
 
             fun bind(proxyEntity: ProxyEntity) {
@@ -2764,14 +2801,20 @@ class ConfigurationFragment @JvmOverloads constructor(
                 // scrolls in or is rebound elsewhere shows its checkbox.
                 bindCheckState()
 
+                // Active state is applied here, ON THE MAIN THREAD, reading
+                // adapter.activeSelectionId as the single source of truth.
+                //
+                // It used to be computed inside the runOnDefaultDispatcher block
+                // below and applied later via onMainDispatcher. That read
+                // DataStore.selectedProxy at some arbitrary point AFTER bind()
+                // returned, so the result could be stale by the time it landed:
+                // tap row B, old row A repaints correctly, then A's late write
+                // puts the highlight back and it blinks before a later rebind
+                // clears it. Read-apply must be atomic w.r.t. the UI thread —
+                // that is what removes the flicker.
+                bindActiveState(proxyEntity.id)
+
                 runOnDefaultDispatcher {
-                    val selected = (parent.selectedItem?.id
-                        ?: DataStore.selectedProxy) == proxyEntity.id
-                    val started = selected && SagerNet.started && DataStore.startedProfile == proxyEntity.id
-                    onMainDispatcher {
-                        deleteButton.isEnabled = !started
-                        setActiveHighlight(selected)
-                    }
 
                     fun showShare(anchor: View) {
                         val popup = PopupMenu(requireContext(), anchor)
