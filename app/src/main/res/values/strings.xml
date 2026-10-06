@@ -726,6 +726,5 @@
     </plurals>
     <string name="action_selection_share">Export to Clipboard</string>
     <string name="selection_shared">%d links copied</string>
-    <string name="selection_matched">%d found</string>
-    <string name="cancel">Cancel</string>
+    <string name="action_selection_exit">Exit selection</string>
 </resources>

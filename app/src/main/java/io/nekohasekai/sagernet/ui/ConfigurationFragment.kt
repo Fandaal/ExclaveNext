@@ -227,10 +227,6 @@ class ConfigurationFragment @JvmOverloads constructor(
                     try {
                         val fragment = (childFragmentManager.findFragmentByTag("f" + selectedGroup.id) as GroupFragment?)
                         fragment?.adapter?.filter(query)
-                        // Tell the fragment about the query too: it keeps its
-                        // own bar in sync, which is the only bulk-action entry
-                        // point while the search field owns the toolbar.
-                        fragment?.onSearchFilterChanged(query)
                     } catch (_: Exception) {}
                 }
                 return false
@@ -267,7 +263,6 @@ class ConfigurationFragment @JvmOverloads constructor(
             override fun onTabUnselected(tab: TabLayout.Tab) {
                 val fragment = (childFragmentManager.findFragmentByTag("f" + selectedGroup.id) as GroupFragment?)
                 fragment?.adapter?.filter("")
-                fragment?.onSearchFilterChanged("")
             }
 
             override fun onTabReselected(tab: TabLayout.Tab) {}
@@ -1845,28 +1840,14 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         // --- Exclave Next: contextual selection bar --------------------------
         // Deliberately NOT in the toolbar: while the SearchView is expanded it
-        // takes over the whole toolbar, so any selection actions placed there
-        // would disappear exactly when the user is filtering. This bar is part
-        // of the list fragment and stays reachable during a search.
+        // takes over the whole toolbar. The bar exists ONLY while the explicit
+        // selection mode is on — a search alone never shows it, and its
+        // actions never fall back to "the whole group": they run against the
+        // checked rows or not at all.
         private var selectionBar: View? = null
         private var selectionCount: TextView? = null
         private var selectionAllButton: View? = null
         private var selectionMoreButton: View? = null
-        private var selectionCloseButton: View? = null
-        private var selectionEnterButton: View? = null
-
-        /** True while the SearchView has a non-empty query. The bar stays
-         *  available in that state, because an expanded SearchView owns the
-         *  whole toolbar and the toolbar entry point is unreachable — this is
-         *  the only way to reach the bulk actions on a filtered list. */
-        private var filterActive = false
-
-        /** Called by the parent whenever the search query changes. */
-        fun onSearchFilterChanged(query: String) {
-            filterActive = query.isNotEmpty()
-            syncBackCallback()
-            updateSelectionBar()
-        }
 
         /** Arms this screen's single Back callback while it has something to do:
          *  an open search field, or selection mode. Called from the one place
@@ -1891,30 +1872,16 @@ class ConfigurationFragment @JvmOverloads constructor(
         fun updateSelectionBar() {
             if (!::adapter.isInitialized) return
             val bar = selectionBar ?: return
-            val checked = adapter.checkedCount()
-            val visible = adapter.configurationIdList.size
-            // Shown while the mode is on, or while a filter is narrowing the
-            // list. Both cases mean there is a set of profiles the user can act
-            // on right now — driven by the explicit mode flag, not by whether
-            // anything happens to be checked.
-            val inMode = adapter.isSelectionMode
-            val show = inMode || filterActive
-            bar.isVisible = show
-            if (!show) return
+            // The bar is the selection mode's UI and nothing else's: a search
+            // narrowing the list does not summon it. Only the explicit mode
+            // flag does — driven by the toolbar "Select" entry and Back.
+            bar.isVisible = adapter.isSelectionMode
+            if (!bar.isVisible) return
 
-            selectionCount?.text = if (checked > 0) {
+            val checked = adapter.checkedCount()
+            selectionCount?.text =
                 resources.getQuantityString(R.plurals.selected_count, checked, checked)
-            } else {
-                // Nothing picked yet (mode just opened, or a filter is on):
-                // show how many rows are on screen so the bar is not blank.
-                getString(R.string.selection_matched, visible)
-            }
-            // The close button exits the mode, so it belongs whenever the mode
-            // is on — including before anything is checked.
-            selectionCloseButton?.isVisible = inMode
-            // The enter button is only needed while the mode is OFF; once the
-            // checkboxes are up it would just be a duplicate way in.
-            selectionEnterButton?.isVisible = !inMode
+            val visible = adapter.configurationIdList.size
             val allVisible = visible > 0 && checked == visible
             selectionAllButton?.contentDescription = getString(
                 if (allVisible) R.string.action_select_none else R.string.action_select_all
@@ -1940,11 +1907,14 @@ class ConfigurationFragment @JvmOverloads constructor(
                 when (item.itemId) {
                     R.id.action_select_all -> adapter.selectAll()
                     R.id.action_select_none -> adapter.clearChecked()
-                    // Every action below takes the checked profiles explicitly,
-                    // so a selection (or a search-filtered set) is operated on
-                    // instead of the whole group.
+                    // Every action below takes the CHECKED profiles explicitly.
+                    // urlTest / speedTest / annotateGeoip / resolveDomains open
+                    // their dialog up front, so they must run on the MAIN
+                    // thread (they launch the probing work themselves). The old
+                    // runOnDefaultDispatcher around urlTest crashed it:
+                    // AlertDialog.show() from a background thread.
                     R.id.action_selection_url_test ->
-                        withSelection { runOnDefaultDispatcher { requirePrent().urlTest(it) } }
+                        withSelection { requirePrent().urlTest(it) }
                     R.id.action_selection_annotate_geoip ->
                         withSelection { requirePrent().annotateGeoip(it) }
                     R.id.action_selection_resolve_domains ->
@@ -1961,16 +1931,18 @@ class ConfigurationFragment @JvmOverloads constructor(
                         withSelection { runOnDefaultDispatcher { requirePrent().deduplicate(it) } }
                     R.id.action_selection_share -> withSelection { requirePrent().shareLinks(it) }
                     R.id.action_selection_delete -> deleteChecked()
+                    R.id.action_selection_exit -> exitSelectionMode()
                 }
                 return true
             }
         }
 
-        /** Runs a bulk operation against the checked profiles. The bar is only
-         *  reachable in selection mode, so an empty set means "the visible
-         *  (filtered) list" — matching what the user is looking at. */
+        /** Runs a bulk operation against the CHECKED profiles — checked ones or
+         *  nobody. Never falls back to the visible list: with an empty
+         *  selection an action must do nothing, not silently act on the
+         *  whole group (that fallback was the phantom-selection bug). */
         private inline fun withSelection(crossinline block: (List<ProxyEntity>) -> Unit) {
-            val targets = adapter.selectedProfiles()
+            val targets = adapter.checkedProfiles()
             if (targets.isEmpty()) return
             block(targets)
         }
@@ -1979,13 +1951,30 @@ class ConfigurationFragment @JvmOverloads constructor(
             val popup = PopupMenu(requireContext(), anchor)
             popup.menuInflater.inflate(R.menu.profile_selection_menu, popup.menu)
             val checked = if (::adapter.isInitialized) adapter.checkedCount() else 0
-            popup.menu.findItem(R.id.action_select_none).isVisible = checked > 0
+            val hasTargets = checked > 0
+            popup.menu.findItem(R.id.action_select_none).isVisible = hasTargets
+            // Strict selection semantics: the actions run against the CHECKED
+            // rows only. With nothing checked they would be no-ops — greyed
+            // out here so the menu can never look like it acts on rows the
+            // user never checked (the phantom-selection bug).
+            listOf(
+                R.id.action_selection_url_test,
+                R.id.action_selection_annotate_geoip,
+                R.id.action_selection_resolve_domains,
+                R.id.action_selection_speed_test,
+                R.id.action_selection_clear_test_results,
+                R.id.action_selection_clear_traffic,
+                R.id.action_selection_delete_unavailable,
+                R.id.action_selection_deduplicate,
+                R.id.action_selection_share,
+                R.id.action_selection_delete,
+            ).forEach { popup.menu.findItem(it).isEnabled = hasTargets }
             popup.setOnMenuItemClickListener(selectionMenuListener)
             popup.show()
         }
 
         private fun deleteChecked() {
-            val targets = adapter.selectedProfiles()
+            val targets = adapter.checkedProfiles()
             if (targets.isEmpty()) return
             // Reuse the outer fragment's confirm-and-delete so selection mode
             // and the group-wide deletes behave identically (same dialog, same
@@ -2079,17 +2068,6 @@ class ConfigurationFragment @JvmOverloads constructor(
             selectionAllButton = view.findViewById(R.id.selection_select_all)
             selectionMoreButton = view.findViewById(R.id.selection_more)
 
-            selectionCloseButton = view.findViewById(R.id.selection_close)
-            selectionEnterButton = view.findViewById(R.id.selection_enter)
-
-            selectionCloseButton?.setOnClickListener {
-                exitSelectionMode()
-            }
-            // Second way into selection mode, reachable while the search field
-            // owns the toolbar. Checks nothing — the user picks from a clean slate.
-            selectionEnterButton?.setOnClickListener {
-                enterSelectionMode()
-            }
             selectionAllButton?.setOnClickListener {
                 if (!::adapter.isInitialized) return@setOnClickListener
                 // Toggles between "check everything visible" and "uncheck
@@ -2293,13 +2271,13 @@ class ConfigurationFragment @JvmOverloads constructor(
                 checkedIds.retainAll { it in visible }
             }
 
-            /** The profiles an operation should act on: the checked ones if any,
-             *  otherwise every profile currently visible in the list. */
-            fun selectedProfiles(): List<ProxyEntity> {
-                val visible = configurationIdList.mapNotNull { getItem(it) }
-                if (checkedIds.isEmpty()) return visible
-                return visible.filter { it.id in checkedIds }
-            }
+            /** The profiles an operation acts on: exactly the checked ones, in
+             *  list order. Empty means nothing is checked — callers must treat
+             *  that as "no targets", never as "the visible list": that fallback
+             *  was the phantom-selection bug (actions ran against rows the
+             *  user never checked). */
+            fun checkedProfiles(): List<ProxyEntity> =
+                configurationIdList.filter { it in checkedIds }.mapNotNull { getItem(it) }
 
             fun checkedCount(): Int = configurationIdList.count { it in checkedIds }
 
@@ -2322,10 +2300,9 @@ class ConfigurationFragment @JvmOverloads constructor(
             /** Check every currently *visible* profile — i.e. the search hits
              *  while a filter is active, the whole group otherwise. */
             fun selectAll() {
-                // Checking rows implies the mode: the checkboxes have to appear,
-                // otherwise the user would see "N selected" with nothing to look
-                // at and no way to undo it row by row. This is reachable from the
-                // bar during a search, where the mode is otherwise still off.
+                // Checking rows implies the mode. Unreachable with the mode off
+                // now that the bar shows only in-mode, but kept as a guard: the
+                // mode flag and the checkbox UI must never get out of step.
                 if (!selectionModeOn) setSelectionMode(true)
                 val visible = configurationIdList.toList()
                 visible.forEach { checkedIds.add(it) }

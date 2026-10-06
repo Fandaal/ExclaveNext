@@ -672,6 +672,5 @@
     </plurals>
     <string name="action_selection_share">Экспорт в буфер обмена</string>
     <string name="selection_shared">Скопировано ссылок: %d</string>
-    <string name="selection_matched">Найдено: %d</string>
-    <string name="cancel">Отмена</string>
+    <string name="action_selection_exit">Выйти из выделения</string>
 </resources>

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Exclave Next: actions available for the profiles currently checked
-     (selected) in a group list. Every entry falls back to "whole group" when
-     nothing is checked, so the same operations stay reachable outside
-     selection mode. -->
+<!-- Exclave Next: actions for the profiles currently checked (selected) in a
+     group list. They operate on the checked set ONLY; when nothing is checked
+     showSelectionMenu() greys them out instead of letting them run against the
+     whole group. -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
     <item
@@ -41,5 +41,8 @@
     <item
         android:id="@+id/action_selection_delete"
         android:title="@string/delete" />
+    <item
+        android:id="@+id/action_selection_exit"
+        android:title="@string/action_selection_exit" />
 
 </menu>
