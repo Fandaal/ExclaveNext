@@ -22,6 +22,7 @@ package io.nekohasekai.sagernet.ui
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.StringRes
@@ -137,12 +138,119 @@ abstract class ThemedActivity : AppCompatActivity {
         }
     }
 
-    fun snackbar(@StringRes resId: Int): Snackbar = snackbar("").setText(resId)
-    fun snackbar(text: CharSequence): Snackbar = snackbarInternal(text).apply {
-        view.findViewById<TextView>(com.google.android.material.R.id.snackbar_text).apply {
-            maxLines = 10
+    /**
+     * Exclave Next: snackbars in front of dialogs.
+     *
+     * A Snackbar is added to a ViewGroup of the ACTIVITY window, while a
+     * dialog is a separate window that is always above it — so a snackbar
+     * shown while any dialog is up renders behind that dialog and is never
+     * seen. Material offers no way to raise a Snackbar above another window
+     * (checked against material 1.14: Snackbar has no overlay/window entry
+     * point), so the show() itself is deferred instead.
+     *
+     * Held back until the activity owns the window focus again, i.e. until the
+     * LAST dialog of a stack is closed — not merely the top one, which is
+     * what made a per-dialog dismissal callback show the snackbar behind the
+     * dialog below it.
+     */
+    private val heldSnackbars = ArrayList<Snackbar>()
+    private var ownsWindowFocus = true
+
+    /** Shows the snackbar now when this activity is the front window, and
+     *  holds it back until every open dialog has been closed otherwise. */
+    internal fun showOnForeground(snackbar: Snackbar) {
+        if (ownsWindowFocus) snackbar.show() else heldSnackbars.add(snackbar)
+    }
+
+    /** Forgets a held snackbar that must never be shown. Dismissing it instead
+     *  would leave it queued, and it would appear later with stale content. */
+    internal fun discardHeldSnackbar(snackbar: Snackbar) {
+        if (heldSnackbars.remove(snackbar)) return
+        // Already shown (or being shown): fall back to a real dismissal, which
+        // is what the caller expects from this call.
+        snackbar.dismiss()
+    }
+
+    private fun releaseHeldSnackbars() {
+        if (heldSnackbars.isEmpty()) return
+        // Material queues snackbars itself, so releasing several at once shows
+        // them one after another instead of stacking them on top of each other.
+        val pending = heldSnackbars.toList()
+        heldSnackbars.clear()
+        pending.forEach { it.show() }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Losing the focus is how this activity learns that something else
+        // (a dialog) is on top of it; regaining it means the last one is gone
+        // and the surface below is visible again.
+        if (hasFocus) {
+            ownsWindowFocus = true
+            releaseHeldSnackbars()
+        } else {
+            ownsWindowFocus = false
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        // Safety net: a focus callback can be missed while the activity is
+        // being recreated, and a snackbar held back since then would then
+        // never be shown at all.
+        ownsWindowFocus = true
+        releaseHeldSnackbars()
+    }
+
+    /**
+     * Exclave Next: a Snackbar that waits for the foreground before showing.
+     *
+     * Snackbar's constructor is private and its show() only attaches the view
+     * to the parent captured at make() time, so interception cannot happen
+     * inside Snackbar itself — and the parent is an ACTIVITY view, while a
+     * dialog lives in its own, always-higher window. Material 1.14 has no
+     * overlay/window API to change that, so the show() is deferred through
+     * this handle instead.
+     *
+     * It forwards the Snackbar API this app uses, so every call site keeps
+     * working unchanged — including chaining like
+     * `snackbar(x).setAction(y) { … }.show()`.
+     */
+    class SnackbarHandle internal constructor(
+        private val activity: ThemedActivity,
+        /** The real snackbar, for callers that need the Material type. */
+        val delegate: Snackbar,
+    ) {
+        fun setText(resId: Int) = apply { delegate.setText(resId) }
+        fun setText(text: CharSequence) = apply { delegate.setText(text) }
+        fun setAction(resId: Int, listener: View.OnClickListener?) =
+            apply { delegate.setAction(resId, listener) }
+
+        fun addCallback(callback: Snackbar.Callback?) = apply { delegate.addCallback(callback) }
+        fun setDuration(duration: Int) = apply { delegate.setDuration(duration) }
+        fun setTextColor(color: Int) = apply { delegate.setTextColor(color) }
+        fun setAnchorView(anchorView: View?) = apply { delegate.anchorView = anchorView }
+        fun dismiss() = delegate.dismiss()
+        fun isShown(): Boolean = delegate.isShown
+
+        /** Drops this snackbar without showing it and without the dismissal
+         *  callback firing — for a message whose content is already obsolete,
+         *  such as the "Undo" offer of a deletion that has been committed. */
+        fun discard() = activity.discardHeldSnackbar(delegate)
+
+        /** The one method that behaves differently: it defers while any
+         *  dialog covers this activity, so the message is actually seen. */
+        fun show() = activity.showOnForeground(delegate)
+    }
+
+    fun snackbar(@StringRes resId: Int): SnackbarHandle = snackbar("").setText(resId)
+
+    fun snackbar(text: CharSequence): SnackbarHandle =
+        SnackbarHandle(this, snackbarInternal(text).apply {
+            view.findViewById<TextView>(com.google.android.material.R.id.snackbar_text).apply {
+                maxLines = 10
+            }
+        })
 
     internal open fun snackbarInternal(text: CharSequence): Snackbar = throw NotImplementedError()
 

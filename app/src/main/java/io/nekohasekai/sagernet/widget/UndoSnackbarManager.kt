@@ -45,7 +45,10 @@ class UndoSnackbarManager<in T>(
     private val recycleBin = ArrayList<Pair<Int, T>>()
     private val removedCallback = object : Snackbar.Callback() {
         override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
-            if (last === transientBottomBar && event != DISMISS_EVENT_ACTION) {
+            // `last` is the handle, `transientBottomBar` the Snackbar it
+            // wraps — compare the delegates so "is this the one we tracked"
+            // still means the same instance.
+            if (last?.delegate === transientBottomBar && event != DISMISS_EVENT_ACTION) {
                 callback.commit(recycleBin)
                 recycleBin.clear()
                 last = null
@@ -53,7 +56,11 @@ class UndoSnackbarManager<in T>(
         }
     }
 
-    private var last: Snackbar? = null
+    // ThemedActivity.SnackbarHandle, not Snackbar: the handle is what
+    // snackbar() returns now, and it defers show() while a dialog covers the
+    // activity. Identity comparison against the dismissed instance still
+    // works, because the handle keeps the same single Snackbar for its life.
+    private var last: ThemedActivity.SnackbarHandle? = null
 
     fun remove(items: Collection<Pair<Int, T>>) {
         recycleBin.addAll(items)
@@ -72,5 +79,12 @@ class UndoSnackbarManager<in T>(
 
     fun remove(vararg items: Pair<Int, T>) = remove(items.toList())
 
-    fun flush() = last?.dismiss()
+    /** Drops the tracked snackbar. A snackbar held back by a covering dialog has
+     *  not been shown yet: dismissing it would leave it in the activity's
+     *  pending queue, where it would pop up later with an "Undo" action whose
+     *  recycle bin has already been committed and emptied. */
+    fun flush() {
+        last?.discard()
+        last = null
+    }
 }

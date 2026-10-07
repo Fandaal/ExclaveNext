@@ -104,16 +104,14 @@ class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interfac
         }
 
         onMainDispatcher {
-            val dialog = MaterialAlertDialogBuilder(context).setTitle(title)
-                .setMessage(status.trim()).setPositiveButton(android.R.string.ok, null).show()
             // The summary line at the bottom of the screen is reported in BOTH
-            // cases — changed and unchanged. A Snackbar lives in the activity
-            // window, so one shown while this dialog is up would render BEHIND
-            // it and never be seen (and would expire long before the user
-            // closes a long profile list). Therefore it is shown on dismissal.
-            dialog.setOnDismissListener {
-                context.snackbar("$title: $summary").show()
-            }
+            // cases — changed and unchanged. ThemedActivity holds a snackbar
+            // back while a dialog covers the activity, so this call needs no
+            // dismissal hook: it appears by itself once the last dialog of the
+            // stack is closed, and never behind one.
+            context.snackbar("$title: $summary").show()
+            MaterialAlertDialogBuilder(context).setTitle(title)
+                .setMessage(status.trim()).setPositiveButton(android.R.string.ok, null).show()
         }
     }
 
