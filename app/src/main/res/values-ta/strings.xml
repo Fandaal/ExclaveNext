@@ -29,8 +29,8 @@
     </plurals>
     <string name="group_no_difference">%s: எந்த மாற்றமும் இல்லை</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: %d சுயவிவரம் புதுப்பிக்கப்பட்டது</item>
-        <item quantity="other">%s: %d சுயவிவரங்கள் புதுப்பிக்கப்பட்டன</item>
+        <item quantity="one">%d சுயவிவரம் புதுப்பிக்கப்பட்டது</item>
+        <item quantity="other">%d சுயவிவரங்கள் புதுப்பிக்கப்பட்டன</item>
     </plurals>
     <string name="group_diff">வேறுபாடு (%s)</string>
     <string name="group_delete_confirm_prompt">இந்தக் குழுவை நிச்சயமாக அகற்ற விரும்புகிறீர்களா?</string>

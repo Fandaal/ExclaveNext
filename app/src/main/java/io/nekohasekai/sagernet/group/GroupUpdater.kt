@@ -124,7 +124,7 @@ abstract class GroupUpdater {
                 } catch (e: Throwable) {
                     Logs.w(e)
                     if (byUser && userInterface != null) {
-                        userInterface.onUpdateFailure(proxyGroup, e.readableMessage)
+                        userInterface.onUpdateFailure(proxyGroup, source, e.readableMessage)
                     }
                     finishUpdate(source)
                     false

@@ -48,8 +48,8 @@
     <string name="group_delete_confirm_prompt">Bu grubu silmek istediğinize emin misiniz\?</string>
     <string name="group_diff">Fark (%s)</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: %d profil güncellendi</item>
-        <item quantity="other">%s: %d profiller güncellendi</item>
+        <item quantity="one">%d profil güncellendi</item>
+        <item quantity="other">%d profiller güncellendi</item>
     </plurals>
     <string name="group_no_difference">%s: Farklılık yok</string>
     <plurals name="group_status_proxies_subscription">

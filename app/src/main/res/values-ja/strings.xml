@@ -27,7 +27,7 @@
     </plurals>
     <string name="group_no_difference">%s: 変更なし</string>
     <plurals name="group_updated">
-        <item quantity="other">%s: 更新済 %d プロファイル</item>
+        <item quantity="other">更新済 %d プロファイル</item>
     </plurals>
     <string name="group_diff">差分 (%s)</string>
     <string name="group_delete_confirm_prompt">このグループを消していいですか？</string>

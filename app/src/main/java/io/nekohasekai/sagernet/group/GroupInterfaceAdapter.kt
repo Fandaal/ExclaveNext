@@ -23,6 +23,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import io.nekohasekai.sagernet.R
 import io.nekohasekai.sagernet.database.GroupManager
 import io.nekohasekai.sagernet.database.ProxyGroup
+import io.nekohasekai.sagernet.database.SubscriptionSource
 import io.nekohasekai.sagernet.ktx.onMainDispatcher
 import io.nekohasekai.sagernet.ktx.runOnMainDispatcher
 import io.nekohasekai.sagernet.ui.ThemedActivity
@@ -53,18 +54,30 @@ class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interfac
 
     override suspend fun onUpdateSuccess(
         group: ProxyGroup,
+        source: SubscriptionSource?,
         changed: Int,
         added: List<String>,
         updated: Map<String, String>,
         deleted: List<String>,
         duplicate: List<String>,
     ) {
+        // Exclave Next: a group holds MANY subscription sources, and an update
+        // run covers ONE of them (GroupUpdater.executeUpdate works per
+        // source). Naming the GROUP here showed the same word in the title
+        // and in the first line of the body, once per subscription — useless
+        // for telling two dialogs apart. Identify the run by the subscription
+        // the user named; the group name stays in the title only when there
+        // is no source to name (should not happen in practice).
+        val title = source?.displayName() ?: group.displayName()
         if (changed == 0 && duplicate.isEmpty()) {
             onMainDispatcher {
-                context.snackbar(context.getString(R.string.group_no_difference, group.displayName())).show()
+                context.snackbar(context.getString(R.string.group_no_difference, title)).show()
             }
         } else {
-            var status = context.resources.getQuantityString(R.plurals.group_updated, changed, group.name, changed) + "\n\n"
+            // No "%s: " prefix here — the name is already the dialog title, and
+            // repeating it in the body's first line was the redundancy being
+            // reported. The plural now carries the count only.
+            var status = context.resources.getQuantityString(R.plurals.group_updated, changed, changed) + "\n\n"
             if (added.isNotEmpty()) {
                 status += context.getString(
                         R.string.group_added, added.joinToString("\n", postfix = "\n\n")
@@ -88,16 +101,17 @@ class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interfac
             }
 
             onMainDispatcher {
-                MaterialAlertDialogBuilder(context).setTitle(
-                        context.getString(
-                                R.string.group_diff, group.displayName()
-                        )
-                ).setMessage(status.trim()).setPositiveButton(android.R.string.ok, null).show()
+                MaterialAlertDialogBuilder(context).setTitle(title)
+                    .setMessage(status.trim()).setPositiveButton(android.R.string.ok, null).show()
             }
         }
     }
 
-    override suspend fun onUpdateFailure(group: ProxyGroup, message: String) {
+    override suspend fun onUpdateFailure(
+        group: ProxyGroup,
+        source: SubscriptionSource?,
+        message: String,
+    ) {
         onMainDispatcher {
             context.snackbar(message).show()
         }

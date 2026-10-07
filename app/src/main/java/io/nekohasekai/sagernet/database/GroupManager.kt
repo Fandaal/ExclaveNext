@@ -38,6 +38,7 @@ object GroupManager {
         suspend fun confirm(message: String): Boolean
         suspend fun onUpdateSuccess(
             group: ProxyGroup,
+            source: SubscriptionSource?,
             changed: Int,
             added: List<String>,
             updated: Map<String, String>,
@@ -45,7 +46,7 @@ object GroupManager {
             duplicate: List<String>
         )
 
-        suspend fun onUpdateFailure(group: ProxyGroup, message: String)
+        suspend fun onUpdateFailure(group: ProxyGroup, source: SubscriptionSource?, message: String)
     }
 
     private val listeners = ArrayList<Listener>()

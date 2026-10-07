@@ -52,9 +52,9 @@
     <string name="group_delete_confirm_prompt">Удалить эту группу?</string>
     <string name="group_diff">Различия (%s)</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: обновлен %d прокси</item>
-        <item quantity="few">%s: обновлено %d прокси</item>
-        <item quantity="many">%s: обновлено %d прокси</item>
+        <item quantity="one">обновлен %d прокси</item>
+        <item quantity="few">обновлено %d прокси</item>
+        <item quantity="many">обновлено %d прокси</item>
     </plurals>
     <string name="group_no_difference">%s: Не отличаются</string>
     <plurals name="group_status_proxies_subscription">

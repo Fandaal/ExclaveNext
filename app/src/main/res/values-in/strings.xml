@@ -64,7 +64,7 @@
     <string name="group_delete_confirm_prompt">Apakah Anda yakin ingin menghapus grup ini?</string>
     <string name="group_diff">Perbedaan (%s)</string>
     <plurals name="group_updated">
-        <item quantity="other">%s: Memperbarui %d profil</item>
+        <item quantity="other">Memperbarui %d profil</item>
     </plurals>
     <string name="group_no_difference">%s: Tidak ada perubahan</string>
     <string name="group_status_empty">Grup kosong</string>

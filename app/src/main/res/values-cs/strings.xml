@@ -33,10 +33,10 @@
     </plurals>
     <string name="group_no_difference">%s: Beze změny</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: Aktualizován %d profil</item>
-        <item quantity="few">%s: Aktualizovány %d profily</item>
-        <item quantity="many">%s: Aktualizováno %d profilů</item>
-        <item quantity="other">%s: Aktualizováno %d profilů</item>
+        <item quantity="one">Aktualizován %d profil</item>
+        <item quantity="few">Aktualizovány %d profily</item>
+        <item quantity="many">Aktualizováno %d profilů</item>
+        <item quantity="other">Aktualizováno %d profilů</item>
     </plurals>
     <string name="group_diff">Rozdíly (%s)</string>
     <string name="group_delete_confirm_prompt">Opravdu chcete tuto skupinu odstranit?</string>

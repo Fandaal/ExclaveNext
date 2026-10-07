@@ -43,8 +43,8 @@
     <string name="network">Nettverk</string>
     <string name="group_diff">Forskjell (%s)</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: Oppdaterte %d mellomtjenere</item>
-        <item quantity="other">%s: Oppdaterte %d mellomtjenere</item>
+        <item quantity="one">Oppdaterte %d mellomtjenere</item>
+        <item quantity="other">Oppdaterte %d mellomtjenere</item>
     </plurals>
     <string name="group_no_difference">%s: Ingen forskjell</string>
     <plurals name="group_status_proxies_subscription">

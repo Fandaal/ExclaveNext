@@ -25,7 +25,7 @@
     </plurals>
     <string name="group_no_difference">%s：没有变化</string>
     <plurals name="group_updated">
-        <item quantity="other">%s：更新了 %d 个配置</item>
+        <item quantity="other">更新了 %d 个配置</item>
     </plurals>
     <string name="group_delete_confirm_prompt">您确定要删除这个分组吗？</string>
     <string name="group_added">新增：\n%s</string>

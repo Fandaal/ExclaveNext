@@ -28,8 +28,8 @@
     <string name="group_delete_confirm_prompt">آیا مطمئن هستید که می خواهید این گروه را حذف کنید؟</string>
     <string name="group_diff">تفاوت (%s)</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: %d پیکربندی به‌روزرسانی شد</item>
-        <item quantity="other">%s: %d پیکربندی‌ها به‌روزرسانی شدند</item>
+        <item quantity="one">%d پیکربندی به‌روزرسانی شد</item>
+        <item quantity="other">%d پیکربندی‌ها به‌روزرسانی شدند</item>
     </plurals>
     <string name="group_no_difference">%s: تفاوتی ندارد</string>
     <plurals name="group_status_proxies_subscription">

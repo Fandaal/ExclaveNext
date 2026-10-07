@@ -183,7 +183,7 @@ object SIP008Updater : GroupUpdater() {
         finishUpdate(source)
 
         if (byUser && userInterface != null) {
-            userInterface.onUpdateSuccess(proxyGroup, changed, added, updated, deleted, duplicate)
+            userInterface.onUpdateSuccess(proxyGroup, source, changed, added, updated, deleted, duplicate)
         }
     }
 

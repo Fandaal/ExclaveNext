@@ -27,7 +27,7 @@
     </plurals>
     <string name="group_no_difference">%s: 변경 사항 없음</string>
     <plurals name="group_updated">
-        <item quantity="other">%s: %d 프로필이 업데이트 되었습니다.</item>
+        <item quantity="other">%d 프로필이 업데이트 되었습니다.</item>
     </plurals>
     <string name="group_diff">차이(%s)</string>
     <string name="group_delete_confirm_prompt">이 그룹을 삭제하시겠습니까?</string>

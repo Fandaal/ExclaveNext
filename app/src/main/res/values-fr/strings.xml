@@ -39,9 +39,9 @@
     <string name="group_delete_confirm_prompt">Vous voulez supprimer ce groupe ?</string>
     <string name="group_diff">Diff (%s)</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: %d profil mis à jour</item>
-        <item quantity="many">%s: %d profils mis à jour</item>
-        <item quantity="other">%s: %d profils mis à jour</item>
+        <item quantity="one">%d profil mis à jour</item>
+        <item quantity="many">%d profils mis à jour</item>
+        <item quantity="other">%d profils mis à jour</item>
     </plurals>
     <string name="group_no_difference">%s : Aucune différence</string>
     <plurals name="group_status_proxies_subscription">

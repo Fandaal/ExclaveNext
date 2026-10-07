@@ -189,9 +189,9 @@
     <string name="port_proxy">Puerto proxy SOCKS5</string>
     <string name="service_mode_proxy">Solo proxy</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: %d perfil actualizado</item>
-        <item quantity="many">%s: %d perfiles actualizados</item>
-        <item quantity="other">%s: %d perfiles actualizados</item>
+        <item quantity="one">%d perfil actualizado</item>
+        <item quantity="many">%d perfiles actualizados</item>
+        <item quantity="other">%d perfiles actualizados</item>
     </plurals>
     <string name="group_no_difference">%s: Sin diferencia</string>
     <plurals name="group_status_proxies">

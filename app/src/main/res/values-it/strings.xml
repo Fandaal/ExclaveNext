@@ -260,9 +260,9 @@
     <string name="group_edit">Modifica Gruppo</string>
     <string name="group_subscription_link">Link Iscrizione</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: Aggiornato/i %d proxy</item>
+        <item quantity="one">Aggiornato/i %d proxy</item>
         <item quantity="many"/>
-        <item quantity="other">%s: Aggiornato/i %d proxy</item>
+        <item quantity="other">Aggiornato/i %d proxy</item>
     </plurals>
     <string name="group_delete_confirm_prompt">Sicuro di voler rimuovere il gruppo\?</string>
     <string name="group_changed">Aggiornato:

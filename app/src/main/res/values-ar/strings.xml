@@ -35,12 +35,12 @@
         <item quantity="other">%d البروکسیز | تم التحديث في</item>
     </plurals>
     <plurals name="group_updated">
-        <item quantity="zero">%s: تم تحديث %d البروکسیز</item>
-        <item quantity="one">%s: تم تحديث %d البروکسیز</item>
-        <item quantity="two">%s: تم تحديث %d البروکسیز</item>
-        <item quantity="few">%s: تم تحديث %d البروکسیز</item>
-        <item quantity="many">%s: تم تحديث %d البروکسیز</item>
-        <item quantity="other">%s: تم تحديث %d البروکسیز</item>
+        <item quantity="zero">تم تحديث %d البروکسیز</item>
+        <item quantity="one">تم تحديث %d البروکسیز</item>
+        <item quantity="two">تم تحديث %d البروکسیز</item>
+        <item quantity="few">تم تحديث %d البروکسیز</item>
+        <item quantity="many">تم تحديث %d البروکسیز</item>
+        <item quantity="other">تم تحديث %d البروکسیز</item>
     </plurals>
     <string name="port_http">منفذ بروکسی HTTP</string>
     <string name="port_proxy">منفذ بروکسی SOCKS5</string>

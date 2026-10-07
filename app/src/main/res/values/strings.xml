@@ -31,8 +31,8 @@
     </plurals>
     <string name="group_no_difference">%s: No change</string>
     <plurals name="group_updated">
-        <item quantity="one">%s: Updated %d profile</item>
-        <item quantity="other">%s: Updated %d profiles</item>
+        <item quantity="one">Updated %d profile</item>
+        <item quantity="other">Updated %d profiles</item>
     </plurals>
     <string name="group_diff">Diff (%s)</string>
     <string name="group_delete_confirm_prompt">Are you sure you want to remove this group?</string>
