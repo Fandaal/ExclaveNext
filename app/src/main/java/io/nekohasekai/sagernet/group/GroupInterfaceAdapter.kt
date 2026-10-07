@@ -73,36 +73,46 @@ class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interfac
             onMainDispatcher {
                 context.snackbar(context.getString(R.string.group_no_difference, title)).show()
             }
-        } else {
-            // No "%s: " prefix here — the name is already the dialog title, and
-            // repeating it in the body's first line was the redundancy being
-            // reported. The plural now carries the count only.
-            var status = context.resources.getQuantityString(R.plurals.group_updated, changed, changed) + "\n\n"
-            if (added.isNotEmpty()) {
-                status += context.getString(
-                        R.string.group_added, added.joinToString("\n", postfix = "\n\n")
-                )
-            }
-            if (updated.isNotEmpty()) {
-                status += context.getString(R.string.group_changed,
-                        updated.map { it }.joinToString("\n", postfix = "\n\n") {
-                            if (it.key == it.value) it.key else "${it.key} => ${it.value}"
-                        })
-            }
-            if (deleted.isNotEmpty()) {
-                status += context.getString(
-                        R.string.group_deleted, deleted.joinToString("\n", postfix = "\n\n")
-                )
-            }
-            if (duplicate.isNotEmpty()) {
-                status += context.getString(
-                        R.string.group_duplicate, duplicate.joinToString("\n", postfix = "\n\n")
-                )
-            }
+            return
+        }
+        // No "%s: " prefix here — the name is already the dialog title, and
+        // repeating it in the body's first line was the redundancy being
+        // reported. The plural now carries the count only, and starts with a
+        // capital because it opens the message as a sentence.
+        val summary = context.resources.getQuantityString(R.plurals.group_updated, changed, changed)
+        var status = summary + "\n\n"
+        if (added.isNotEmpty()) {
+            status += context.getString(
+                    R.string.group_added, added.joinToString("\n", postfix = "\n\n")
+            )
+        }
+        if (updated.isNotEmpty()) {
+            status += context.getString(R.string.group_changed,
+                    updated.map { it }.joinToString("\n", postfix = "\n\n") {
+                        if (it.key == it.value) it.key else "${it.key} => ${it.value}"
+                    })
+        }
+        if (deleted.isNotEmpty()) {
+            status += context.getString(
+                    R.string.group_deleted, deleted.joinToString("\n", postfix = "\n\n")
+            )
+        }
+        if (duplicate.isNotEmpty()) {
+            status += context.getString(
+                    R.string.group_duplicate, duplicate.joinToString("\n", postfix = "\n\n")
+            )
+        }
 
-            onMainDispatcher {
-                MaterialAlertDialogBuilder(context).setTitle(title)
-                    .setMessage(status.trim()).setPositiveButton(android.R.string.ok, null).show()
+        onMainDispatcher {
+            val dialog = MaterialAlertDialogBuilder(context).setTitle(title)
+                .setMessage(status.trim()).setPositiveButton(android.R.string.ok, null).show()
+            // The summary line at the bottom of the screen is reported in BOTH
+            // cases — changed and unchanged. A Snackbar lives in the activity
+            // window, so one shown while this dialog is up would render BEHIND
+            // it and never be seen (and would expire long before the user
+            // closes a long profile list). Therefore it is shown on dismissal.
+            dialog.setOnDismissListener {
+                context.snackbar("$title: $summary").show()
             }
         }
     }
