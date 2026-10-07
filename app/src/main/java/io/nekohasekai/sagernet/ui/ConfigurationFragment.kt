@@ -2367,17 +2367,35 @@ class ConfigurationFragment @JvmOverloads constructor(
 
             private val updated = HashSet<ProxyEntity>()
 
+            /** The query this list is currently narrowed to, "" when unfiltered.
+             *  Owned by the ADAPTER, not the SearchView: every rebuild path —
+             *  reloadProfiles(), onAdd(), observatory ticks, the test dialog's
+             *  dismissal (postReload), subscription updates — flows through
+             *  here, so none of them can ever restore the WHOLE group while
+             *  the search field still holds a query. */
+            var currentFilter: String = ""
+                private set
+
+            /** One predicate, one owner: the rows the search may show. Shared
+             *  by filter() and every rebuild path so a reload can never show
+             *  rows the live query excludes. */
+            private fun matchesFilter(profile: ProxyEntity): Boolean {
+                if (currentFilter.isEmpty()) return true
+                val lower = currentFilter.lowercase()
+                return profile.displayName().lowercase().contains(lower) ||
+                        profile.displayType().lowercase().contains(lower) ||
+                        profile.displayAddress().lowercase().contains(lower)
+            }
+
             fun filter(name: String) {
+                currentFilter = name
                 if (name.isEmpty()) {
                     reloadProfiles()
                     return
                 }
                 configurationIdList.clear()
-                val lower = name.lowercase()
                 configurationIdList.addAll(configurationList.filter {
-                    it.value.displayName().lowercase().contains(lower) ||
-                            it.value.displayType().lowercase().contains(lower) ||
-                            it.value.displayAddress().lowercase().contains(lower)
+                    matchesFilter(it.value)
                 }.keys)
                 // Keep selection tied to what is on screen: rows the filter
                 // hides are dropped from the selection, so the bar count and
@@ -2423,6 +2441,11 @@ class ConfigurationFragment @JvmOverloads constructor(
                     configurationListView.post {
                         if (!configurationIdList.contains(item.id)) {
                             configurationList[item.id] = item
+                            // A row restored by undo joins the view only if the
+                            // live search query still admits it; otherwise it
+                            // stays cached and shows up on the next unfiltered
+                            // reload — same rule as onAdd().
+                            if (!matchesFilter(item)) return@post
                             val safeIndex = index.coerceIn(0, configurationIdList.size)
                             configurationIdList.add(safeIndex, item.id)
                             notifyItemInserted(safeIndex)
@@ -2444,6 +2467,14 @@ class ConfigurationFragment @JvmOverloads constructor(
                 if (profile.groupId != proxyGroup.id) return
 
                 configurationListView.post {
+                    if (!matchesFilter(profile)) {
+                        // Added behind the user's back while a search narrows
+                        // the list (e.g. a subscription update): cache it, but
+                        // it does not join the view until the query is cleared
+                        // and reloadProfiles() runs unfiltered.
+                        configurationList[profile.id] = profile
+                        return@post
+                    }
                     if (::undoManager.isInitialized) {
                         undoManager.flush()
                     }
@@ -2537,7 +2568,16 @@ class ConfigurationFragment @JvmOverloads constructor(
 
                 configurationList.clear()
                 configurationList.putAll(newProfiles.associateBy { it.id })
-                val newProfileIds = newProfiles.map { it.id }
+                var newProfileIds = newProfiles.map { it.id }
+                // Reapply the live search query on every rebuild: the reload
+                // paths (observatory tick, test-dialog dismissal, subscription
+                // update, group rename) used to restore the WHOLE group here,
+                // un-hiding every profile while the search field still held
+                // the query. The cache above keeps everything; only the
+                // visible id list is narrowed.
+                if (currentFilter.isNotEmpty()) {
+                    newProfileIds = newProfiles.filter { matchesFilter(it) }.map { it.id }
+                }
 
                 var selectedProfileIndex = -1
 
