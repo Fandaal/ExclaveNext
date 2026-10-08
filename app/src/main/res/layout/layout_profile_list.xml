@@ -11,6 +11,9 @@
     android:orientation="vertical"
     tools:context=".ui.ConfigurationFragment">
 
+    <!-- selection_bar paddingStart = 14dp aligns the counter with the visible
+         checkbox square in the rows below: 4dp (list padding) + 4dp (card
+         margin) + 6dp (transparent inset inside the 32dp checkbox drawable). -->
     <LinearLayout
         android:id="@+id/selection_bar"
         android:layout_width="match_parent"
@@ -19,7 +22,7 @@
         android:gravity="center_vertical"
         android:minHeight="?attr/actionBarSize"
         android:orientation="horizontal"
-        android:paddingStart="4dp"
+        android:paddingStart="14dp"
         android:paddingEnd="4dp"
         android:visibility="gone"
         tools:visibility="visible">
