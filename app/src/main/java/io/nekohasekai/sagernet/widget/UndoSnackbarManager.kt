@@ -84,7 +84,17 @@ class UndoSnackbarManager<in T>(
      *  pending queue, where it would pop up later with an "Undo" action whose
      *  recycle bin has already been committed and emptied. */
     fun flush() {
-        last?.discard()
-        last = null
+        val target = last ?: return
+        if (target.discard()) {
+            // Quietly dropped while still held back: no dismissal event will
+            // ever fire, so the deletion would never be committed by the
+            // callback — commit it right here instead.
+            last = null
+            callback.commit(recycleBin)
+            recycleBin.clear()
+        }
+        // Otherwise it was already on screen: it is dismissing normally and
+        // removedCallback still sees last === it, so the commit happens through
+        // the usual path. Clearing last here would have cut that check off.
     }
 }

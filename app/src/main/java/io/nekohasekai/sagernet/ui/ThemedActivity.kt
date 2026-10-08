@@ -153,31 +153,69 @@ abstract class ThemedActivity : AppCompatActivity {
      * what made a per-dialog dismissal callback show the snackbar behind the
      * dialog below it.
      */
-    private val heldSnackbars = ArrayList<Snackbar>()
+    private val heldSnackbars = ArrayDeque<Snackbar>()
     private var ownsWindowFocus = true
+
+    /** True while a held snackbar is on screen waiting to hand the floor to
+     *  the next one. The one-shot callback detaches itself as soon as it
+     *  fires, so a dismissed snackbar leaves no listener behind. */
+    private var draining = false
+
+    private val drainCallback = object : Snackbar.Callback() {
+        override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+            if (!draining) return
+            transientBottomBar?.removeCallback(this)
+            // Only pull the next one when the queue was the reason this one
+            // ended — a user swipe or a dismiss() call is not a handover.
+            draining = false
+            showNextHeld()
+        }
+    }
 
     /** Shows the snackbar now when this activity is the front window, and
      *  holds it back until every open dialog has been closed otherwise. */
     internal fun showOnForeground(snackbar: Snackbar) {
-        if (ownsWindowFocus) snackbar.show() else heldSnackbars.add(snackbar)
+        if (ownsWindowFocus) {
+            snackbar.show()
+        } else {
+            // Held snackbars keep their full duration: Material arms the
+            // timer in show(), so nothing expires while waiting in the queue.
+            heldSnackbars.add(snackbar)
+        }
     }
 
-    /** Forgets a held snackbar that must never be shown. Dismissing it instead
-     *  would leave it queued, and it would appear later with stale content. */
-    internal fun discardHeldSnackbar(snackbar: Snackbar) {
-        if (heldSnackbars.remove(snackbar)) return
-        // Already shown (or being shown): fall back to a real dismissal, which
-        // is what the caller expects from this call.
+    /** Forgets a snackbar that must not surface. Returns true when it was still
+     *  waiting in the queue and was quietly dropped — in that case no
+     *  dismissal event will ever fire, so a caller whose own cleanup hangs off
+     *  onDismissed must do that cleanup itself. Returns false when the
+     *  snackbar was already on screen: it is dismissed normally and the
+     *  dismissal event does fire. */
+    internal fun discardHeldSnackbar(snackbar: Snackbar): Boolean {
+        if (heldSnackbars.remove(snackbar)) return true
         snackbar.dismiss()
+        return false
+    }
+
+    /** Puts ONE held snackbar on screen and hands the floor to the next one
+     *  only after it is gone. Material keeps a single "next" slot — calling
+     *  show() on several at once overwrites it, so everything but the last
+     *  would be lost, which is exactly what this serialises. */
+    private fun showNextHeld() {
+        // A dialog that came up mid-drain must pause the queue: showing the
+        // next one now would send it behind that dialog. Focus returning
+        // restarts the drain through releaseHeldSnackbars().
+        if (!ownsWindowFocus) return
+        val next = heldSnackbars.removeFirstOrNull() ?: return
+        draining = true
+        next.addCallback(drainCallback)
+        next.show()
     }
 
     private fun releaseHeldSnackbars() {
         if (heldSnackbars.isEmpty()) return
-        // Material queues snackbars itself, so releasing several at once shows
-        // them one after another instead of stacking them on top of each other.
-        val pending = heldSnackbars.toList()
-        heldSnackbars.clear()
-        pending.forEach { it.show() }
+        // Hand over only when nothing is being drained yet; an in-flight drain
+        // continues on its own and will call back here when the queue empties.
+        if (!draining) showNextHeld()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -233,10 +271,11 @@ abstract class ThemedActivity : AppCompatActivity {
         fun dismiss() = delegate.dismiss()
         fun isShown(): Boolean = delegate.isShown
 
-        /** Drops this snackbar without showing it and without the dismissal
-         *  callback firing — for a message whose content is already obsolete,
-         *  such as the "Undo" offer of a deletion that has been committed. */
-        fun discard() = activity.discardHeldSnackbar(delegate)
+        /** Drops this snackbar. True = it was still waiting in the hold queue and
+         *  was removed without ever being shown, so no dismissal event will
+         *  fire; false = it was already on screen and a regular dismissal
+         *  (with its events) took place. */
+        fun discard(): Boolean = activity.discardHeldSnackbar(delegate)
 
         /** The one method that behaves differently: it defers while any
          *  dialog covers this activity, so the message is actually seen. */
