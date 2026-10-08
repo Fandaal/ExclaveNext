@@ -1022,6 +1022,20 @@ class ConfigurationFragment @JvmOverloads constructor(
             if (!binding.listView.canScrollVertically(1)) autoFollow = true
         }
 
+        // A retry round is a fresh pass over the same rows: rewind to the top
+        // (instant snap — a smooth glide over hundreds of rows would take
+        // ages), re-arm the follow so this pass scrolls like round one, and
+        // kill the pending follow-scroll of the previous round's last rows —
+        // left alive it fires after the snap and drags the list back down.
+        fun beginRound() {
+            binding.listView.post {
+                currentTask?.cancel()
+                currentTask = null
+                autoFollow = true
+                binding.listView.scrollToPosition(0)
+            }
+        }
+
         private fun scrollToPosition(index: Int) {
             try {
                 scrollTimer.schedule(timerTask {
@@ -1036,7 +1050,7 @@ class ConfigurationFragment @JvmOverloads constructor(
             }
         }
 
-        fun update(profile: ProxyEntity) {
+        fun update(profile: ProxyEntity, follow: Boolean = false) {
             binding.listView.post {
                 // Keyed by id rather than indexOf(): value-equality works today only because
                 // `results` holds the same mutated instances, so it is correct but
@@ -1044,6 +1058,14 @@ class ConfigurationFragment @JvmOverloads constructor(
                 val index = results.indexOfLast { it.id == profile.id }
                 if (index < 0) return@post
                 adapter.notifyItemChanged(index)
+                // Retry rounds reuse the row, so the row never re-enters via
+                // insert(); without a scroll here the list stays parked at the
+                // bottom where round one ended. follow=true is passed only by
+                // the URL test's retry rounds; the one-pass dialogs keep the
+                // old no-scroll behaviour.
+                if (follow && autoFollow) {
+                    scrollToPosition(index)
+                }
             }
         }
 
@@ -1188,9 +1210,32 @@ class ConfigurationFragment @JvmOverloads constructor(
                 if (pending.isEmpty()) break
                 if (!isActive) break
 
+                // Rewind for retry rounds: rows already exist, nothing will
+                // re-enter via insert(), so without a rewind the list would
+                // stay parked at the bottom where the previous round ended.
+                // beginRound() also cancels the pending 500ms follow-scroll
+                // of round one's last rows, or it would drag the list back
+                // down right after the snap.
+                if (round > 1) test.beginRound()
+
                 val roundList = pending.toList()
                 val stillPending = ConcurrentLinkedQueue<ProxyEntity>()
-                val queue = ConcurrentLinkedQueue(roundList)
+                // Retry rounds pass over rows the user can already see, so the
+                // pass runs top-to-bottom on screen. Without the sort the queue
+                // keeps the previous round's failure order, and the "wave" of
+                // testing rows jumps around the list instead of walking it.
+                // results is main-thread-owned (every add happens in a post),
+                // so the index is read on the main dispatcher — this suspend
+                // also guarantees round one's inserts are all applied by now.
+                val queue = if (round == 1) {
+                    ConcurrentLinkedQueue(roundList)
+                } else {
+                    val order = HashMap<Long, Int>(roundList.size)
+                    onMainDispatcher {
+                        test.results.forEachIndexed { i, p -> order[p.id] = i }
+                    }
+                    ConcurrentLinkedQueue(roundList.sortedBy { order[it.id] ?: Int.MAX_VALUE })
+                }
 
                 // Attempts made so far in this round, out of the ones it started with.
                 roundDoneCount.set(0)
@@ -1247,9 +1292,11 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 profile.status = 0
                                 test.insert(profile)
                             } else {
-                                // On a retry round, mark the profile as testing again.
+                                // On a retry round, mark the profile as testing again
+                                // and follow it: the row already exists, so only this
+                                // scroll keeps the list walking with the round.
                                 profile.status = 0
-                                test.update(profile)
+                                test.update(profile, follow = true)
                             }
 
                             // "Will this be probed again?" — decided where the profile is re-queued.
