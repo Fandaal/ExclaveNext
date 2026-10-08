@@ -156,66 +156,68 @@ abstract class ThemedActivity : AppCompatActivity {
     private val heldSnackbars = ArrayDeque<Snackbar>()
     private var ownsWindowFocus = true
 
-    /** True while a held snackbar is on screen waiting to hand the floor to
-     *  the next one. The one-shot callback detaches itself as soon as it
-     *  fires, so a dismissed snackbar leaves no listener behind. */
-    private var draining = false
+    /** The snackbar the drain currently has on screen, null when the queue is
+     *  idle. Doubles as the "a drain is in flight" flag: its dismissal
+     *  callback is what pulls the next one, so a dismissed one must null this
+     *  out before advancing. */
+    private var drainShown: Snackbar? = null
 
     private val drainCallback = object : Snackbar.Callback() {
         override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
-            if (!draining) return
+            if (drainShown !== transientBottomBar) return
             transientBottomBar?.removeCallback(this)
-            // Only pull the next one when the queue was the reason this one
-            // ended — a user swipe or a dismiss() call is not a handover.
-            draining = false
+            drainShown = null
+            // Any dismissal hands the floor over — timeout, swipe, a dismiss()
+            // call, or the user tapping the action button.
             showNextHeld()
         }
     }
 
-    /** Shows the snackbar now when this activity is the front window, and
-     *  holds it back until every open dialog has been closed otherwise. */
+    /** Every snackbar enters the one-by-one queue, dialogs or not. Showing
+     *  several directly let Material replace the current one with each new
+     *  show() — back-to-back updates (fast fetches, "no change" runs) then
+     *  wiped out snackbars in fractions of a second, always the same ones,
+     *  because the update order and its timings are the same every run. */
     internal fun showOnForeground(snackbar: Snackbar) {
-        if (ownsWindowFocus) {
-            snackbar.show()
-        } else {
-            // Held snackbars keep their full duration: Material arms the
-            // timer in show(), so nothing expires while waiting in the queue.
-            heldSnackbars.add(snackbar)
-        }
+        heldSnackbars.add(snackbar)
+        if (ownsWindowFocus && drainShown == null) showNextHeld()
     }
 
-    /** Forgets a snackbar that must not surface. Returns true when it was still
-     *  waiting in the queue and was quietly dropped — in that case no
+    /** Forgets a snackbar that must not surface. Returns true when it was
+     *  still waiting in the queue and was quietly dropped — in that case no
      *  dismissal event will ever fire, so a caller whose own cleanup hangs off
      *  onDismissed must do that cleanup itself. Returns false when the
      *  snackbar was already on screen: it is dismissed normally and the
      *  dismissal event does fire. */
     internal fun discardHeldSnackbar(snackbar: Snackbar): Boolean {
         if (heldSnackbars.remove(snackbar)) return true
+        // Off the queue but on screen (the drain's current one): the dismissal
+        // callback still advances the queue when the event lands.
         snackbar.dismiss()
         return false
     }
 
-    /** Puts ONE held snackbar on screen and hands the floor to the next one
-     *  only after it is gone. Material keeps a single "next" slot — calling
-     *  show() on several at once overwrites it, so everything but the last
-     *  would be lost, which is exactly what this serialises. */
+    /** Puts ONE snackbar on screen and hands the floor to the next one only
+     *  after it is gone. Material keeps a single "next" slot — calling show()
+     *  on several at once overwrites it, so everything but the last would be
+     *  lost, which is exactly what this serialises. */
     private fun showNextHeld() {
         // A dialog that came up mid-drain must pause the queue: showing the
         // next one now would send it behind that dialog. Focus returning
         // restarts the drain through releaseHeldSnackbars().
         if (!ownsWindowFocus) return
         val next = heldSnackbars.removeFirstOrNull() ?: return
-        draining = true
         next.addCallback(drainCallback)
+        drainShown = next
         next.show()
     }
 
     private fun releaseHeldSnackbars() {
         if (heldSnackbars.isEmpty()) return
-        // Hand over only when nothing is being drained yet; an in-flight drain
-        // continues on its own and will call back here when the queue empties.
-        if (!draining) showNextHeld()
+        // drainShown != null means one is still ticking (possibly behind the
+        // last dialog just closed): its own callback chains the queue, pulling
+        // it here would make Material drop the shown one.
+        if (drainShown == null) showNextHeld()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
