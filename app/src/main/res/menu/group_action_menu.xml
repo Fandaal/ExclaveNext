@@ -43,4 +43,8 @@
     <item
         android:id="@+id/action_clear"
         android:title="@string/clear_profiles" />
+    <item
+        android:id="@+id/action_edit_group"
+        android:visible="false"
+        android:title="@string/group_edit" />
 </menu>

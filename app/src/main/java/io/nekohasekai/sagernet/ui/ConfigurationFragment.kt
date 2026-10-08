@@ -155,6 +155,11 @@ class ConfigurationFragment @JvmOverloads constructor(
     lateinit var groupPager: ViewPager2
     var searchView: SearchView? = null
 
+    // The shared group popup (Share / Sources / Clear / Edit). Constructed in
+    // a field initializer, like the registerForActivityResult properties
+    // above, so its CreateDocument launchers register at construction time.
+    private val groupMenuActions = GroupMenuActions(this)
+
     // Whether the search field is currently on screen. Read straight from
     // SearchView instead of tracking it by hand: isIconified() is public in
     // appcompat (verified against 1.8.0 with javap) and is set false by
@@ -273,7 +278,17 @@ class ConfigurationFragment @JvmOverloads constructor(
             if (adapter.groupList.size > position) {
                 tab.text = adapter.groupList[position].displayName()
             }
-            tab.view.setOnLongClickListener { // clear toast
+            tab.view.setOnLongClickListener {
+                // Long-press on a group tab opens the group menu, with the
+                // "Edit group" entry enabled — the tab is the only handle the
+                // group has here. Picker instances (quick toggle, profile
+                // select) keep the old swallow-only behavior, as does a group
+                // being updated (the Groups screen hides its menu there too).
+                val group = adapter.groupList.getOrNull(position)
+                    ?: return@setOnLongClickListener true
+                if (!select && !GroupUpdater.isGroupUpdating(group.id)) {
+                    groupMenuActions.show(it, group, includeEdit = true)
+                }
                 true
             }
         }.attach()
