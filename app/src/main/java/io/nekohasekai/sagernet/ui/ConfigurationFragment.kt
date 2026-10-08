@@ -972,33 +972,54 @@ class ConfigurationFragment @JvmOverloads constructor(
         val scrollTimer = Timer("insert timer")
         var currentTask: TimerTask? = null
 
+        // Auto-follow state. The original scheme scrolled on EVERY insert
+        // unconditionally; the isRowVisible() gate (afc3dbd1) broke it under
+        // concurrency: with N workers the insert point jumps N rows at a time,
+        // falls outside the "near the viewport" window after the first batch,
+        // and the list freezes. Follow-the-test is back to unconditional, but
+        // the user can still take over: a finger drag suspends the following,
+        // and coming back to the bottom resumes it.
+        var autoFollow = true
+
         fun insert(profile: ProxyEntity) {
             binding.listView.post {
                 results.add(profile)
                 val index = results.size - 1
                 adapter.notifyItemInserted(index)
-                // Follow the test as it happens: scroll only if this row is
-                // already near the viewport. Auto-scrolling on every insert
-                // fights the user and, with several workers finishing at once,
-                // drags the list to the bottom and back. The original app did
-                // this unconditionally, which was fine when rows appeared one
-                // at a time.
-                if (isRowVisible(index)) {
+                if (autoFollow) {
                     scrollToPosition(index)
                 }
             }
         }
 
-        private fun isRowVisible(index: Int): Boolean {
-            val lm = binding.listView.layoutManager as? LinearLayoutManager ?: return true
-            if (index < 0) return false
-            val first = lm.findFirstVisibleItemPosition()
-            val last = lm.findLastVisibleItemPosition()
-            if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return false
-            // Keep a margin of a couple of rows around the viewport so the
-            // insertion is visible, but don't yank the list across the screen.
-            val margin = 2
-            return index >= first - margin && index <= last + margin
+        init {
+            binding.listView.layoutManager = FixedLinearLayoutManager(binding.listView)
+            binding.listView.itemAnimator = DefaultItemAnimator()
+            binding.listView.adapter = adapter
+            binding.listView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    // Any touch-driven drag takes the list away from the test;
+                    // stop following until the user returns to the bottom.
+                    if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                        autoFollow = false
+                    } else if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                        maybeResumeFollow()
+                    }
+                }
+
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    maybeResumeFollow()
+                }
+            })
+        }
+
+        // At the bottom again — resume following the test. Covers both the
+        // fling/settle path (onScrolled) and the drag that stops right at the
+        // end without consuming pixels (IDLE). View.canScrollVertically(1) is
+        // false exactly when no content is left below the viewport.
+        private fun maybeResumeFollow() {
+            if (autoFollow) return
+            if (!binding.listView.canScrollVertically(1)) autoFollow = true
         }
 
         private fun scrollToPosition(index: Int) {
@@ -1033,12 +1054,6 @@ class ConfigurationFragment @JvmOverloads constructor(
                 }, 0)
             } catch (ignored: Exception) {
             }
-        }
-
-        init {
-            binding.listView.layoutManager = FixedLinearLayoutManager(binding.listView)
-            binding.listView.itemAnimator = DefaultItemAnimator()
-            binding.listView.adapter = adapter
         }
 
         inner class TestAdapter : RecyclerView.Adapter<TestResultHolder>() {
