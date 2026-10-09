@@ -667,6 +667,7 @@
     <string name="snell_obfs_uri">Obfuscation URI</string>
     <string name="naiveproxy_tunnel_timeout">Tunnel timeout (s)</string>
     <string name="naiveproxy_idle_timeout">Idle timeout (s)</string>
+    <string name="uri_template">URI Template</string>
 
     <!-- Exclave Next: GeoIP settings -->
     <string name="geoip_settings">GeoIP</string>

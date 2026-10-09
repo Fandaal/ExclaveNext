@@ -513,7 +513,7 @@
     <string name="bypass_private_sum">Özel adresleri VPN\'den hariç tut</string>
     <string name="sniffing_sum">HTTP Host, TLS SNI ve QUIC SNI\'dan alan adını ve protokol türünü tespit et</string>
     <string name="hosts_sum">Belirtilen alan adını belirtilen IP adresine çözümle</string>
-    <string name="domain_strategy_ipv4_only">Yalnızca IPv6</string>
+    <string name="domain_strategy_ipv4_only">Yalnızca IPv4</string>
     <string name="domain_strategy_prefer_ipv4">IPv4\'ü tercih et</string>
     <string name="domain_strategy_ipv4_and_ipv6">IPv4 ve IPv6</string>
     <string name="domain_strategy_prefer_ipv6">IPv6\'yı tercih et</string>

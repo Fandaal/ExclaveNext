@@ -1,6 +1,6 @@
 [libraries]
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version = "9.4.1" }
-kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version = "2.4.20" }
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version = "2.4.21" }
 github-api = { module = "org.kohsuke:github-api", version = "1.330" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version = "5.5.0" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version = "1.11.0" }
@@ -42,7 +42,7 @@ snakeyaml = { module = "org.yaml:snakeyaml", version = "2.7" }
 geoip2 = { module = "com.maxmind.geoip2:geoip2", version = "4.2.1" }
 material-about-library = { module = "com.github.daniel-stoneuk:material-about-library", version = "3.2.0-rc01" }
 process-phoenix = { module = "com.jakewharton:process-phoenix", version = "3.0.0" }
-kryo = { module = "com.esotericsoftware:kryo", version = "5.6.2" }
+kryo = { module = "com.esotericsoftware:kryo", version = "5.7.0" }
 junit = { module = "junit:junit", version = "4.13.2" }
 jini-lib = { module = "com.sshtools:jini-lib", version = "0.6.14" }
 markwon-core = { module = "io.noties.markwon:core", version = "4.6.2" }

@@ -591,4 +591,5 @@
     <string name="snell_obfs_uri">混淆 URI</string>
     <string name="naiveproxy_tunnel_timeout">隧道超时（秒）</string>
     <string name="naiveproxy_idle_timeout">空闲超时（秒）</string>
+    <string name="uri_template">URI 模板</string>
 </resources>

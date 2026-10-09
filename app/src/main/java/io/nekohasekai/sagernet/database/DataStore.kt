@@ -421,6 +421,9 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var serverHysteria2OmitMaxDatagramFrameSize by profileCacheStore.boolean(Key.SERVER_HYSTERIA2_OMIT_MAX_DATAGRAM_FRAME_SIZE)
     var serverSSHKeepaliveInterval by profileCacheStore.stringToIntIfExists(Key.SERVER_SSH_KEEPALIVE_INTERVAL)
 
+    var serverHTTPConnectUDP by profileCacheStore.boolean(Key.SERVER_HTTP_CONNECT_UDP)
+    var serverHTTPConnectUDPURITemplate by profileCacheStore.string(Key.SERVER_HTTP_CONNECT_UDP_URI_TEMPLATE)
+
     var serverNaiveNoPostQuantum by profileCacheStore.boolean(Key.SERVER_NAIVE_NO_POST_QUANTUM)
     var serverNaiveTunnelTimeout by profileCacheStore.stringToIntIfExists(Key.SERVER_NAIVE_TUNNEL_TIMEOUT)
     var serverNaiveIdleTimeout by profileCacheStore.stringToIntIfExists(Key.SERVER_NAIVE_IDLE_TIMEOUT)

@@ -627,6 +627,7 @@
     <string name="ssh_host_key">Ключ хоста</string>
     <string name="naiveproxy_tunnel_timeout">Тайм-аут туннеля (с)</string>
     <string name="naiveproxy_idle_timeout">Тайм-аут бездействия (с)</string>
+    <string name="uri_template">Шаблон URI</string>
 
     <!-- Exclave Next: GeoIP settings -->
     <string name="geoip_settings">GeoIP</string>

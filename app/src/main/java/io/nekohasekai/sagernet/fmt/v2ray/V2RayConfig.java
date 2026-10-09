@@ -745,6 +745,8 @@ public class V2RayConfig {
 
         public List<ServerObject> servers;
         public Boolean h1SkipWaitForReply;
+        public Boolean connectUDP;
+        public String uriTemplate;
 
         public static class ServerObject {
 
@@ -764,6 +766,8 @@ public class V2RayConfig {
         public String username;
         public String password;
         public Map<String, String> headers;
+        public Boolean connectUDP;
+        public String uriTemplate;
 
     }
 

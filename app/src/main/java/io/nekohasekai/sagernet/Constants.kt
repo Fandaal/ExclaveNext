@@ -261,6 +261,9 @@ object Key {
     const val SERVER_SERVER_NAME_TO_VERIFY = "serverServerNameToVerify"
     const val SERVER_HYSTERIA2_OMIT_MAX_DATAGRAM_FRAME_SIZE = "serverHysteria2OmitMaxDatagramFrameSize"
     const val SERVER_SSH_KEEPALIVE_INTERVAL = "serverSSHKeepaliveInterval"
+    const val SERVER_HTTP_CONNECT_UDP_CATEGORY = "serverHTTPConnectUDPCategory"
+    const val SERVER_HTTP_CONNECT_UDP = "serverHTTPConnectUDP"
+    const val SERVER_HTTP_CONNECT_UDP_URI_TEMPLATE = "serverHTTPConnectUDPURITemplate"
 
     const val SERVER_PORTS = "serverPorts"
     const val SERVER_HOP_INTERVAL = "serverHopInterval"

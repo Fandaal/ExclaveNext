@@ -176,6 +176,13 @@ class ConfigurationFragment @JvmOverloads constructor(
     val selectedGroup get() = if (tabLayout.isGone && adapter.groupList.size > 0) adapter.groupList[0] else (if (adapter.groupList.size > 0 && tabLayout.selectedTabPosition > -1) adapter.groupList[tabLayout.selectedTabPosition] else ProxyGroup())
     val alwaysShowAddress by lazy { DataStore.alwaysShowAddress }
 
+    fun refreshAllSelections() {
+        if (!::adapter.isInitialized) return
+        adapter.groupFragments.values.forEach {
+            it.refreshSelection()
+        }
+    }
+
     val updateSelectedCallback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageScrolled(
             position: Int, positionOffset: Float, positionOffsetPixels: Int
@@ -2069,13 +2076,17 @@ class ConfigurationFragment @JvmOverloads constructor(
         val parent get() = parentFragment as? ConfigurationFragment
         fun requirePrent() = requireParentFragment() as ConfigurationFragment
 
+        fun refreshSelection() {
+            if (::adapter.isInitialized) {
+                adapter.refreshSelection()
+            }
+        }
+
         override fun onResume() {
             super.onResume()
-
             if (::adapter.isInitialized) {
-                if (adapter.itemCount == 0) {
-                    runOnDefaultDispatcher { adapter.reloadProfiles() }
-                }
+                if (adapter.itemCount == 0) runOnDefaultDispatcher { adapter.reloadProfiles() }
+                adapter.refreshSelection()
             } else {
                 onViewCreated(requireView(), null)
             }
@@ -2295,6 +2306,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                 return configurationIdList.size
             }
             var activeSelectionId: Long = -1
+            var activeStarted: Boolean = false
+            var activeStartedProfile: Long = -1
 
             // --- Exclave Next: multi-select -----------------------------------
             // Ids of the checked profiles. Kept as ids rather than positions so
@@ -2417,11 +2430,19 @@ class ConfigurationFragment @JvmOverloads constructor(
 
             fun refreshSelection() {
                 val newId = currentActiveId
-                if (activeSelectionId == newId) return
-                val oldId = activeSelectionId
-                activeSelectionId = newId
+                val newStarted = SagerNet.started
+                val newStartedProfile = DataStore.startedProfile
 
-                listOf(oldId, newId).forEach { id ->
+                if (activeSelectionId == newId && activeStarted == newStarted && activeStartedProfile == newStartedProfile) return
+
+                val oldId = activeSelectionId
+                val oldStartedProfile = activeStartedProfile
+
+                activeSelectionId = newId
+                activeStarted = newStarted
+                activeStartedProfile = newStartedProfile
+
+                listOf(oldId, newId, oldStartedProfile, newStartedProfile).filter { it != -1L }.distinct().forEach { id ->
                     val index = configurationIdList.indexOf(id)
                     if (index != -1) notifyItemChanged(index, "PAYLOAD_SELECTION_CHANGE")
                 }
@@ -2438,8 +2459,17 @@ class ConfigurationFragment @JvmOverloads constructor(
                     val entityId = configurationIdList[position]
 
                     holder.bindActiveState(entityId)
+                } else if (payloads.contains("PAYLOAD_STATE_UPDATE")) {
+                    getItemAt(position)?.let { profile ->
+                        if (holder.entity.id == profile.id) {
+                            holder.updateState(profile)
+                        } else {
+                            holder.bind(profile)
+                        }
+                    }
                 } else {
                     super.onBindViewHolder(holder, position, payloads)
+                    return
                 }
             }
 
@@ -2572,7 +2602,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                         undoManager.flush()
                     }
                     configurationList[profile.id] = profile
-                    notifyItemChanged(index)
+                    notifyItemChanged(index, "PAYLOAD_STATE_UPDATE")
                 }
             }
 
@@ -2763,7 +2793,7 @@ class ConfigurationFragment @JvmOverloads constructor(
 
                 if (parent.select) {
                     view.setOnClickListener {
-                        (requireActivity() as SelectCallback).returnProfile(proxyEntity.id)
+                        (requireActivity() as SelectCallback).returnProfile(entity.id)
                     }
                 } else if (adapter.isSelectionMode) {
                     // Selection mode: a tap checks/unchecks the row instead of
@@ -2777,10 +2807,11 @@ class ConfigurationFragment @JvmOverloads constructor(
 
                     view.setOnClickListener {
                         runOnDefaultDispatcher {
+                            val id = entity.id
                             var update: Boolean
                             profileAccess.withLock {
-                                update = DataStore.selectedProxy != proxyEntity.id
-                                DataStore.selectedProxy = proxyEntity.id
+                                update = DataStore.selectedProxy != id
+                                DataStore.selectedProxy = id
                             }
 
                             if (update) {
@@ -2800,18 +2831,97 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 }
                             }
                         }
-
                     }
                 }
+
+                profileStatus.setOnClickListener {
+                    if (entity.status == 3) {
+                        alert(entity.error ?: "<?>").show()
+                    }
+                }
+
+                editButton.setOnClickListener {
+                    entity.settingIntent(it.context, proxyGroup.type == GroupType.SUBSCRIPTION)?.let {
+                        editProfileLauncher.launch(it)
+                    }
+                }
+
+                deleteButton.setOnClickListener { view ->
+                    view.post {
+                        adapter.let {
+                            val profile = entity
+                            val index = it.configurationIdList.indexOf(profile.id)
+                            if (index >= 0) {
+                                it.remove(index)
+                                it.pendingDeletedIds.add(profile.id)
+                                undoManager.remove(index to profile)
+                            }
+                        }
+                    }
+                }
+
+                // Suppress ItemTouchHelper drag while a row button is held to avoid conflict with parent item's long press.
+                deleteButton.suppressDragWhilePressed { actionButtonPressed = it }
+                editButton.suppressDragWhilePressed { actionButtonPressed = it }
+                shareLayout.suppressDragWhilePressed { actionButtonPressed = it }
+
+                if (!parent.select) {
+                    shareLayout.setOnClickListener { anchor ->
+                        val profile = entity
+                        if (DataStore.profileSecurityAdvisory && profile.requireBean().isInsecure) {
+                            MaterialAlertDialogBuilder(requireContext())
+                                .setTitle(R.string.insecure_warn)
+                                .setMessage(R.string.insecure_warning_detail)
+                                .setPositiveButton(android.R.string.ok) { _, _ ->
+                                    showShare(anchor)
+                                }
+                                .show()
+                        } else {
+                            showShare(anchor)
+                        }
+                    }
+                } else {
+                    shareLayout.setOnClickListener(null)
+                }
+
+                // Per-row buttons are hidden in selection mode: the bar is the action
+                // surface then, and leaving them visible invites mis-taps.
+                editButton.isGone = parent.select || adapter.isSelectionMode
+                deleteButton.isGone = parent.select || adapter.isSelectionMode
+                shareButton.isGone = parent.select || adapter.isSelectionMode
+
+                // Multi-select state is part of a normal bind too, so a row that
+                // scrolls in or is rebound elsewhere shows its checkbox.
+                bindCheckState()
+
+                // Active state is applied here, ON THE MAIN THREAD, reading
+                // adapter.activeSelectionId as the single source of truth —
+                // read-apply atomic w.r.t. the UI thread removes the flicker
+                // on the previously selected row (see bindActiveState).
+                bindActiveState(proxyEntity.id)
+
+                updateState(proxyEntity)
+                updateSelectionState(proxyEntity.id)
+            }
+
+            /** Selection state is OUR bindActiveState(): the upstream
+             *  updateSelectionState() painted the removed selected_view stripe,
+             *  replaced here by the card outline (see setActiveHighlight). */
+            fun updateSelectionState(entityId: Long) {
+                bindActiveState(entityId)
+            }
+
+            fun updateState(proxyEntity: ProxyEntity) {
+                val parent = parent ?: return
+
+                entity = proxyEntity
 
                 profileName.text = proxyEntity.displayName()
                 profileType.text = proxyEntity.displayType()
 
                 var rx = proxyEntity.rx
                 var tx = proxyEntity.tx
-
-                val stats = proxyEntity.stats
-                if (stats != null) {
+                proxyEntity.stats?.let { stats ->
                     rx += stats.rxTotal
                     tx += stats.txTotal
                 }
@@ -2827,143 +2937,71 @@ class ConfigurationFragment @JvmOverloads constructor(
                 }
 
                 var address = proxyEntity.displayAddress()
-
                 if (proxyEntity.requireBean().name.isEmpty() || !parent.alwaysShowAddress) {
                     address = ""
                 }
-
                 profileAddress.text = address
                 (trafficText.parent as View).isGone = (!showTraffic || proxyEntity.status <= 0) && address.isEmpty()
 
-                if (proxyEntity.status <= 0) {
-                    if (showTraffic) {
-                        profileStatus.text = trafficText.text
-                        profileStatus.setTextColor(requireContext().getColorAttr(android.R.attr.textColorSecondary))
-                        trafficText.text = ""
-                    } else {
-                        profileStatus.text = ""
+                when {
+                    proxyEntity.status <= 0 -> {
+                        if (showTraffic) {
+                            profileStatus.text = trafficText.text
+                            profileStatus.setTextColor(requireContext().getColorAttr(android.R.attr.textColorSecondary))
+                            trafficText.text = ""
+                        } else {
+                            profileStatus.text = ""
+                        }
                     }
-                } else if (proxyEntity.status == 1) {
-                    profileStatus.text = getString(R.string.available, proxyEntity.ping)
-                    profileStatus.setTextColor(requireContext().getColour(R.color.material_green_500))
-                } else {
-                    profileStatus.setTextColor(requireContext().getColour(R.color.material_red_500))
-                    if (proxyEntity.status == 2) {
+                    proxyEntity.status == 1 -> {
+                        profileStatus.text = getString(R.string.available, proxyEntity.ping)
+                        profileStatus.setTextColor(requireContext().getColour(R.color.material_green_500))
+                    }
+                    proxyEntity.status == 2 -> {
                         profileStatus.text = proxyEntity.error
+                        profileStatus.setTextColor(requireContext().getColour(R.color.material_red_500))
+                    }
+                    proxyEntity.status == 3 -> {
+                        profileStatus.setText(R.string.unavailable)
+                        profileStatus.setTextColor(requireContext().getColour(R.color.material_red_500))
                     }
                 }
 
-                if (proxyEntity.status == 3) {
-                    profileStatus.setText(R.string.unavailable)
-                    profileStatus.setOnClickListener {
-                        alert(proxyEntity.error ?: "<?>").show()
+                profileStatus.isClickable = proxyEntity.status == 3
+
+                // The share button is re-shown here, so this must respect
+                // selection mode too — otherwise it would undo the isGone set
+                // in bind() and leave the button on screen.
+                if (!parent.select && !adapter.isSelectionMode) {
+                    val isInsecure = DataStore.profileSecurityAdvisory && proxyEntity.requireBean().isInsecure
+                    if (isInsecure) {
+                        shareLayer.setBackgroundColor(Color.RED)
+                        shareButton.setImageResource(R.drawable.ic_baseline_warning_24)
+                        shareButton.setColorFilter(Color.WHITE)
+                    } else {
+                        shareLayer.setBackgroundColor(Color.TRANSPARENT)
+                        shareButton.setImageResource(R.drawable.ic_social_share)
+                        shareButton.setColorFilter(Color.GRAY)
                     }
-                } else {
-                    profileStatus.setOnClickListener(null)
+                    shareButton.isVisible = true
+                }
+            }
+
+            fun showShare(anchor: View) {
+                val profile = entity
+                val popup = PopupMenu(requireContext(), anchor)
+                popup.menuInflater.inflate(R.menu.profile_share_menu, popup.menu)
+
+                if (!profile.hasShareLink() && profile.wgBean == null) {
+                    popup.menu.removeItem(R.id.action_qr)
+                    popup.menu.removeItem(R.id.action_clipboard)
+                }
+                if (showBackup && profile.canExportBackup()) {
+                    popup.menu.findItem(R.id.action_export_backup).isVisible = true
                 }
 
-                editButton.setOnClickListener {
-                    proxyEntity.settingIntent(it.context, proxyGroup.type == GroupType.SUBSCRIPTION)?.let {
-                        editProfileLauncher.launch(it)
-                    }
-                }
-
-                deleteButton.setOnClickListener { view ->
-                    view.post {
-                        adapter.let {
-                            val index = it.configurationIdList.indexOf(proxyEntity.id)
-                            if (index >= 0) {
-                                it.remove(index)
-                                it.pendingDeletedIds.add(proxyEntity.id)
-                                undoManager.remove(index to proxyEntity)
-                            }
-                        }
-                    }
-                }
-
-                // suppress ItemTouchHelper drag while a row button is held, to avoid conflict with parent item's long-press
-                deleteButton.suppressDragWhilePressed { actionButtonPressed = it }
-                editButton.suppressDragWhilePressed { actionButtonPressed = it }
-                shareLayout.suppressDragWhilePressed { actionButtonPressed = it }
-
-                // Per-row buttons are hidden in selection mode: the bar is the action
-                // surface then, and leaving them visible invites mis-taps.
-                editButton.isGone = parent.select || adapter.isSelectionMode
-                deleteButton.isGone = parent.select || adapter.isSelectionMode
-                shareButton.isGone = parent.select || adapter.isSelectionMode
-
-                // Multi-select state is part of a normal bind too, so a row that
-                // scrolls in or is rebound elsewhere shows its checkbox.
-                bindCheckState()
-
-                // Active state is applied here, ON THE MAIN THREAD, reading
-                // adapter.activeSelectionId as the single source of truth.
-                //
-                // It used to be computed inside the runOnDefaultDispatcher block
-                // below and applied later via onMainDispatcher. That read
-                // DataStore.selectedProxy at some arbitrary point AFTER bind()
-                // returned, so the result could be stale by the time it landed:
-                // tap row B, old row A repaints correctly, then A's late write
-                // puts the highlight back and it blinks before a later rebind
-                // clears it. Read-apply must be atomic w.r.t. the UI thread —
-                // that is what removes the flicker.
-                bindActiveState(proxyEntity.id)
-
-                runOnDefaultDispatcher {
-
-                    fun showShare(anchor: View) {
-                        val popup = PopupMenu(requireContext(), anchor)
-                        popup.menuInflater.inflate(R.menu.profile_share_menu, popup.menu)
-
-                        if (!proxyEntity.hasShareLink() && proxyEntity.wgBean == null) {
-                            popup.menu.removeItem(R.id.action_qr)
-                            popup.menu.removeItem(R.id.action_clipboard)
-                        }
-                        if (showBackup && proxyEntity.canExportBackup()) {
-                            popup.menu.findItem(R.id.action_export_backup).isVisible = true
-                        }
-
-                        popup.setOnMenuItemClickListener(this@ConfigurationHolder)
-                        popup.show()
-                    }
-
-                    // This block re-shows the share button, so it must respect
-                    // selection mode too — otherwise it would undo the
-                    // isGone set above and leave the button on screen.
-                    if (!parent.select && !adapter.isSelectionMode) {
-                        val isInsecure = DataStore.profileSecurityAdvisory && proxyEntity.requireBean().isInsecure
-                        onMainDispatcher {
-                            if (isInsecure) {
-                                shareLayer.setBackgroundColor(Color.RED)
-                                shareButton.setImageResource(R.drawable.ic_baseline_warning_24)
-                                shareButton.setColorFilter(Color.WHITE)
-                            } else {
-                                shareLayer.setBackgroundColor(Color.TRANSPARENT)
-                                shareButton.setImageResource(R.drawable.ic_social_share)
-                                shareButton.setColorFilter(Color.GRAY)
-
-                            }
-                            shareButton.isVisible = true
-                            if (isInsecure) {
-                                shareLayout.setOnClickListener {
-                                    MaterialAlertDialogBuilder(requireContext())
-                                        .setTitle(R.string.insecure_warn)
-                                        .setMessage(R.string.insecure_warning_detail)
-                                        .setPositiveButton(android.R.string.ok) { _, _ ->
-                                            showShare(it)
-                                        }
-                                        .show()
-                                }
-                            } else {
-                                shareLayout.setOnClickListener {
-                                    showShare(it)
-                                }
-                            }
-
-                        }
-                    }
-                }
-
+                popup.setOnMenuItemClickListener(this@ConfigurationHolder)
+                popup.show()
             }
 
             fun updateTraffic(proxyEntity: ProxyEntity) {
