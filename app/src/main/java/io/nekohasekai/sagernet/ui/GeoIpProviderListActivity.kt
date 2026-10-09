@@ -15,7 +15,6 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.Menu
 import android.view.MenuItem
-import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.EditText
 import androidx.core.view.ViewCompat
@@ -40,6 +39,11 @@ class GeoIpProviderListActivity : ThemedActivity() {
     private lateinit var binding: LayoutGeoipProviderListBinding
     private lateinit var adapter: EntryAdapter
     private lateinit var touchHelper: ItemTouchHelper
+
+    // True while a row control (delete button, switch) is pressed — read by
+    // DragCallback.getDragDirs to keep whole-card drag from stealing those
+    // taps, the same suppression the main screen's config list uses.
+    private var actionButtonPressed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -213,7 +217,16 @@ class GeoIpProviderListActivity : ThemedActivity() {
         ItemTouchHelper.UP or ItemTouchHelper.DOWN,
         0,
     ) {
-        override fun isLongPressDragEnabled(): Boolean = false
+        // Whole-card drag, like the main screen's config list: press and hold
+        // the card itself. getDragDirs suppresses the drag while a row button
+        // or the switch is pressed, so tapping them never starts a drag.
+        override fun getDragDirs(
+            recyclerView: RecyclerView,
+            viewHolder: RecyclerView.ViewHolder,
+        ): Int {
+            return if (actionButtonPressed) 0
+            else super.getDragDirs(recyclerView, viewHolder)
+        }
 
         override fun onMove(
             recyclerView: RecyclerView,
@@ -319,13 +332,11 @@ class GeoIpProviderListActivity : ThemedActivity() {
                 removeAt(position)
             }
 
-            binding.dragHandle.setOnTouchListener { view, event ->
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                    touchHelper.startDrag(this)
-                }
-                view.performClick()
-                false
-            }
+            // Whole-card drag: press-and-hold anywhere on the card moves it.
+            // The delete button and the enabled switch opt out via
+            // suppressDragWhilePressed, so their taps are never hijacked.
+            binding.entryDelete.suppressDragWhilePressed { actionButtonPressed = it }
+            binding.entryEnabled.suppressDragWhilePressed { actionButtonPressed = it }
         }
     }
 }

@@ -19,6 +19,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isInvisible
 import androidx.core.view.updatePadding
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.snackbar.Snackbar
 import io.nekohasekai.sagernet.R
@@ -40,6 +41,10 @@ class SubscriptionSourcesActivity : ThemedActivity(), GroupManager.Listener {
     private lateinit var binding: LayoutSubscriptionSourcesBinding
     private lateinit var adapter: SourceAdapter
     private var groupId: Long = 0L
+
+    // True while a row control (edit icon, update button) is pressed — keeps
+    // whole-card drag from stealing their taps, mirroring the main screen.
+    private var actionButtonPressed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,6 +81,55 @@ class SubscriptionSourcesActivity : ThemedActivity(), GroupManager.Listener {
         binding.recyclerView.layoutManager = FixedLinearLayoutManager(binding.recyclerView)
         adapter = SourceAdapter()
         binding.recyclerView.adapter = adapter
+
+        // Whole-card press-and-hold drag, the same mechanism as the main
+        // screen's config list. userOrder is persisted only in clearView — the
+        // finger-lift — so a drag does not hammer the database on every swap.
+        ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
+            ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0
+        ) {
+            override fun getDragDirs(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+            ): Int {
+                return if (actionButtonPressed) 0
+                else super.getDragDirs(recyclerView, viewHolder)
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
+
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder,
+            ): Boolean {
+                val from = viewHolder.bindingAdapterPosition
+                val to = target.bindingAdapterPosition
+                if (from < 0 || to < 0) return false
+                adapter.sources.add(to, adapter.sources.removeAt(from))
+                adapter.notifyItemMoved(from, to)
+                return true
+            }
+
+            override fun clearView(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+            ) {
+                super.clearView(recyclerView, viewHolder)
+                // Reindex 0..N-1 top to bottom and write through to the DB.
+                // byGroup() sorts by userOrder, so the next reload keeps the
+                // dragged order.
+                val order = adapter.sources
+                runOnDefaultDispatcher {
+                    order.forEachIndexed { index, source ->
+                        if (source.userOrder != index.toLong()) {
+                            source.userOrder = index.toLong()
+                            SagerDatabase.sourceDao.update(source)
+                        }
+                    }
+                }
+            }
+        }).attachToRecyclerView(binding.recyclerView)
 
         GroupManager.addListener(this)
         adapter.reload()
@@ -212,6 +266,13 @@ class SubscriptionSourcesActivity : ThemedActivity(), GroupManager.Listener {
             binding.sourceUpdate.setOnClickListener {
                 GroupUpdater.startUpdate(source, true)
             }
+
+            // Whole-card drag: press-and-hold the card to reorder. The edit
+            // icon and the update button opt out so their taps are never
+            // turned into a drag; a plain tap on the card still opens the
+            // editor.
+            binding.edit.suppressDragWhilePressed { actionButtonPressed = it }
+            binding.sourceUpdate.suppressDragWhilePressed { actionButtonPressed = it }
         }
     }
 }
