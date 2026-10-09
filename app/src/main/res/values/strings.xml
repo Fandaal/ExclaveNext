@@ -86,11 +86,11 @@
     <string name="require_transproxy">Enable transparent proxy inbound</string>
     <string name="transproxy_mode">Transparent proxy mode</string>
     <string name="connection_test_url">Connection test URL</string>
-    <string name="connection_test_custom_concurrency">Connection test threads</string>
+    <string name="connection_test_custom_concurrency">URL test threads</string>
     <string name="connection_test_custom_concurrency_invalid">Concurrency must be a positive integer</string>
     <string name="connection_test_custom_timeout">Connection test timeout (ms)</string>
-    <string name="connection_test_rounds">URL test rounds</string>
-    <string name="speed_test_threads">Speed test threads</string>
+    <string name="connection_test_rounds">URL test rounds count</string>
+    <string name="speed_test_threads">Speed test thread count</string>
     <string name="speed_test_threads_invalid">Speed test threads must be a positive integer</string>
     <string name="speed_test_timeout">Max measurement duration (ms)</string>
     <string name="speed_test_timeout_invalid">Measurement duration must be a positive integer</string>
