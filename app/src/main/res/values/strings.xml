@@ -507,7 +507,7 @@
     <string name="rules_geoip_url">geoip.dat URL</string>
     <string name="http_proxy_exception_list">HTTP proxy exception list</string>
     <string name="mux_settings">Mux.Cool settings</string>
-    <string name="update_subscription">Update subscription</string>
+    <string name="update_subscription">Update subscriptions</string>
     <string name="group_not_a_subscription">This group is not a subscription.</string>
     <string name="enable_fragment">Enable TLS Client Hello fragmentation</string>
     <string name="enable_fragment_sum">May help circumvent SNI censorship. This option may get removed in the future.</string>
@@ -719,12 +719,13 @@
     <!-- Exclave Next: multi-select of configs in a group -->
     <string name="action_select_all">Select all</string>
     <string name="action_select_none">Clear selection</string>
-    <string name="action_selection_mode">Select</string>
+    <string name="action_advanced">Advanced</string>
+    <string name="action_selection_mode">Selection mode</string>
     <plurals name="selected_count">
         <item quantity="one">%d selected</item>
         <item quantity="other">%d selected</item>
     </plurals>
     <string name="action_selection_share">Export to Clipboard</string>
     <string name="selection_shared">%d links copied</string>
-    <string name="action_selection_exit">Exit selection</string>
+    <string name="action_selection_exit">Exit selection mode</string>
 </resources>
