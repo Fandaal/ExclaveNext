@@ -105,20 +105,13 @@ class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interfac
 
         onMainDispatcher {
             // The summary line at the bottom of the screen is reported in BOTH
-            // cases — changed and unchanged. The snackbar queue holds it back
-            // while the diff dialog is up: it appears once the LAST dialog of
-            // the stack is closed, never behind one.
+            // cases — changed and unchanged. ThemedActivity holds a snackbar
+            // back while a dialog covers the activity, so this call needs no
+            // dismissal hook: it appears by itself once the last dialog of the
+            // stack is closed, and never behind one.
             context.snackbar("$title: $summary").show()
-            // Register BEFORE show(): the snackbar above is queued in the same
-            // breath, and the window-focus loss only arrives once the dialog
-            // has traversed — without this the queue would release the first
-            // snackbar straight under the dialog it belongs to.
-            context.dialogOpening()
-            val dialog = MaterialAlertDialogBuilder(context).setTitle(title)
+            MaterialAlertDialogBuilder(context).setTitle(title)
                 .setMessage(status.trim()).setPositiveButton(android.R.string.ok, null).show()
-            dialog.setOnDismissListener {
-                context.dialogClosed()
-            }
         }
     }
 
