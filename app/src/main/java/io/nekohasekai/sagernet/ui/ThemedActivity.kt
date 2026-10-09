@@ -156,6 +156,32 @@ abstract class ThemedActivity : AppCompatActivity {
     private val heldSnackbars = ArrayDeque<Snackbar>()
     private var ownsWindowFocus = true
 
+    /** Dialogs opened over this activity that called dialogOpening() and have
+     *  not been dismissed yet. The window-focus loss only arrives AFTER a
+     *  dialog has traversed, but a snackbar created in the same breath — an
+     *  update summary right before its diff dialog — would slip past the
+     *  focus check, show behind the dialog and expire unseen. Registering the
+     *  dialog before showing it closes that gap: the queue knows about the
+     *  covering window before the window exists. */
+    private var coveringDialogs = 0
+
+    /** True while nothing may be shown: focus lost to any window, or one of
+     *  the registered dialogs is still up. */
+    private fun isCovered() = !ownsWindowFocus || coveringDialogs > 0
+
+    /** Announce a dialog that is about to cover this activity. */
+    internal fun dialogOpening() {
+        coveringDialogs++
+    }
+
+    /** Announce that a registered dialog was dismissed. The queue resumes
+     *  when the last one closes and the activity owns the focus again —
+     *  whichever of the two events lands first, the other path releases. */
+    internal fun dialogClosed() {
+        coveringDialogs = (coveringDialogs - 1).coerceAtLeast(0)
+        if (coveringDialogs == 0 && ownsWindowFocus) releaseHeldSnackbars()
+    }
+
     /** The snackbar the drain currently has on screen, null when the queue is
      *  idle. Doubles as the "a drain is in flight" flag: its dismissal
      *  callback is what pulls the next one, so a dismissed one must null this
@@ -180,7 +206,7 @@ abstract class ThemedActivity : AppCompatActivity {
      *  because the update order and its timings are the same every run. */
     internal fun showOnForeground(snackbar: Snackbar) {
         heldSnackbars.add(snackbar)
-        if (ownsWindowFocus && drainShown == null) showNextHeld()
+        if (!isCovered() && drainShown == null) showNextHeld()
     }
 
     /** Forgets a snackbar that must not surface. Returns true when it was
@@ -205,7 +231,7 @@ abstract class ThemedActivity : AppCompatActivity {
         // A dialog that came up mid-drain must pause the queue: showing the
         // next one now would send it behind that dialog. Focus returning
         // restarts the drain through releaseHeldSnackbars().
-        if (!ownsWindowFocus) return
+        if (isCovered()) return
         val next = heldSnackbars.removeFirstOrNull() ?: return
         next.addCallback(drainCallback)
         drainShown = next
