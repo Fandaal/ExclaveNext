@@ -32,7 +32,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SearchView
 import androidx.appcompat.widget.Toolbar
@@ -924,38 +923,6 @@ class ConfigurationFragment @JvmOverloads constructor(
     //            wears in the list below (material_red_500).
     // "done" (final verdicts, alive or not) drives the progress bar only, since
     // that is what makes it monotonic; it is not shown as a number.
-    private fun updateTestCounter(
-        dialog: AlertDialog,
-        alive: Int,
-        total: Int,
-        roundAttempt: Int,
-        roundTotal: Int,
-        round: Int,
-        rounds: Int,
-    ) {
-        val neutral = dialog.getButton(DialogInterface.BUTTON_NEUTRAL)
-        val green = ForegroundColorSpan(
-            requireContext().getColour(R.color.material_green_500)
-        )
-        val red = ForegroundColorSpan(
-            requireContext().getColour(R.color.material_red_500)
-        )
-        val builder = SpannableStringBuilder()
-        // Span over the numerator only: the denominators are group/round sizes,
-        // not results, so they keep the default colour.
-        builder.append("$alive").setSpan(green, 0, "$alive".length, SPAN)
-        builder.append("/$total")
-        if (rounds > 1) {
-            builder.append(" • $round/$rounds • $roundAttempt/")
-            // Only the DENOMINATOR is red: it is the number of profiles this round
-            // still had to check, i.e. the ones that have not answered yet. The
-            // attempts count next to it is progress, not a failure.
-            val start = builder.length
-            builder.append("$roundTotal")
-            builder.setSpan(red, start, builder.length, SPAN)
-        }
-        neutral.text = builder
-    }
 
     inner class TestDialog {
         val binding = LayoutProgressListBinding.inflate(layoutInflater)
@@ -964,7 +931,6 @@ class ConfigurationFragment @JvmOverloads constructor(
                 close()
                 cancel()
             }
-            .setNeutralButton(" ", null)
             .setCancelable(false)
         lateinit var cancel: () -> Unit
         val results = ArrayList<ProxyEntity>()
@@ -1078,6 +1044,48 @@ class ConfigurationFragment @JvmOverloads constructor(
             }
         }
 
+        // Multi-round counter, rendered into the counter TextView at the bottom
+        // of the dialog body — NOT the neutral button it used to live in: on
+        // long lists the button-row text wrapped to a second line, the row grew
+        // downward and the dialog clipped it at the bottom edge. A body TextView
+        // wraps normally and the button row stays one line forever.
+        //   alive  — profiles that answered with a LIVE ping, out of the whole
+        //            group. Green, like a live ping in the list above.
+        //   round  — attempts made in the current round, out of the profiles
+        //            that round started with. Moves on every attempt.
+        //   the last pair counts the dead ones, so it wears the red that
+        //            "unavailable" wears in the list above (material_red_500).
+        fun updateCounter(
+            alive: Int,
+            total: Int,
+            roundAttempt: Int = 0,
+            roundTotal: Int = 0,
+            round: Int = 1,
+            rounds: Int = 1,
+        ) {
+            val green = ForegroundColorSpan(
+                requireContext().getColour(R.color.material_green_500)
+            )
+            val red = ForegroundColorSpan(
+                requireContext().getColour(R.color.material_red_500)
+            )
+            val builder = SpannableStringBuilder()
+            // Span over the numerator only: the denominators are group/round sizes,
+            // not results, so they keep the default colour.
+            builder.append("$alive").setSpan(green, 0, "$alive".length, SPAN)
+            builder.append("/$total")
+            if (rounds > 1) {
+                builder.append(" • $round/$rounds • $roundAttempt/")
+                // Only the DENOMINATOR is red: it is the number of profiles this
+                // round still had to check, i.e. the ones that have not answered
+                // yet. The attempts count next to it is progress, not a failure.
+                val start = builder.length
+                builder.append("$roundTotal")
+                builder.setSpan(red, start, builder.length, SPAN)
+            }
+            binding.testCounter.text = builder
+        }
+
         inner class TestAdapter : RecyclerView.Adapter<TestResultHolder>() {
             override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
                 TestResultHolder(LayoutProfileBinding.inflate(layoutInflater, parent, false))
@@ -1169,7 +1177,6 @@ class ConfigurationFragment @JvmOverloads constructor(
     fun urlTest(targets: List<ProxyEntity>? = null) {
         val test = TestDialog()
         val dialog = test.builder.show()
-        dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
         val testJobs = mutableListOf<Job>()
 
         val mainJob = runOnDefaultDispatcher {
@@ -1247,8 +1254,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                 // round's first results. Older posts drop out here instead.
                 val currentRound = java.util.concurrent.atomic.AtomicInteger(round)
                 onMainDispatcher {
-                    updateTestCounter(
-                        dialog, aliveProfileCount.get(), profileCount,
+                    test.updateCounter(
+                        aliveProfileCount.get(), profileCount,
                         roundDoneCount.get(), roundTotal, round, rounds
                     )
                 }
@@ -1358,8 +1365,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                                             true
                                         )
                                     }
-                                    updateTestCounter(
-                                        dialog, aliveProfileCount.get(), profileCount,
+                                    test.updateCounter(
+                                        aliveProfileCount.get(), profileCount,
                                         roundDoneCount.get(), roundTotal, round, rounds
                                     )
                                 }
@@ -1369,8 +1376,8 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 // looks frozen while profiles are being retried.
                                 onMainDispatcher {
                                     if (currentRound.get() != round) return@onMainDispatcher
-                                    updateTestCounter(
-                                        dialog, aliveProfileCount.get(), profileCount,
+                                    test.updateCounter(
+                                        aliveProfileCount.get(), profileCount,
                                         roundDoneCount.get(), roundTotal, round, rounds
                                     )
                                 }
@@ -1424,7 +1431,6 @@ class ConfigurationFragment @JvmOverloads constructor(
     fun annotateGeoip(targets: List<ProxyEntity>? = null) {
         val test = TestDialog()
         val dialog = test.builder.show()
-        dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
 
         if (!io.nekohasekai.sagernet.bg.GeoIpAnnotator.isChainUsable()) {
             snackbar(getString(R.string.geoip_db_missing)).show()
@@ -1478,8 +1484,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                                     true
                                 )
                             }
-                            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
-                                "$finished/$profileCount"
+                            test.updateCounter(finished, profileCount)
                         }
                         test.update(profile)
                         ProfileManager.updateProfile(profile)
@@ -1512,7 +1517,6 @@ class ConfigurationFragment @JvmOverloads constructor(
     fun resolveDomains(targets: List<ProxyEntity>? = null) {
         val test = TestDialog()
         val dialog = test.builder.show()
-        dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
 
         val mainJob = runOnDefaultDispatcher {
             val group = DataStore.currentGroup()
@@ -1569,8 +1573,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                                     true
                                 )
                             }
-                            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
-                                "$finished/$profileCount"
+                            test.updateCounter(finished, profileCount)
                         }
                         test.update(profile)
                         ProfileManager.updateProfile(profile)
@@ -1602,7 +1605,6 @@ class ConfigurationFragment @JvmOverloads constructor(
     fun speedTest(targets: List<ProxyEntity>? = null) {
         val test = TestDialog()
         val dialog = test.builder.show()
-        dialog.getButton(DialogInterface.BUTTON_NEUTRAL).isEnabled = false
 
         val mainJob = runOnDefaultDispatcher {
             val group = DataStore.currentGroup()
@@ -1696,8 +1698,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                                     true
                                 )
                             }
-                            dialog.getButton(DialogInterface.BUTTON_NEUTRAL).text =
-                                "$finished/$profileCount"
+                            test.updateCounter(finished, profileCount)
                         }
                         test.update(profile)
                         ProfileManager.updateProfile(profile)

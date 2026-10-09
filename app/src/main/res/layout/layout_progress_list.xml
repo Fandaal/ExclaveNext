@@ -15,6 +15,26 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/list_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Test statistics (alive/total, rounds) used to live in the dialog's
+         neutral BUTTON. On long counters the text no longer fit on one line
+         next to "Cancel", the button row grew a second line and the dialog
+         clipped it at the bottom. A plain TextView wraps normally and the
+         button row stays one line forever. minLines keeps the slot reserved
+         so the list does not jump when the first numbers arrive. -->
+    <TextView
+        android:id="@+id/test_counter"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:minLines="1"
+        android:paddingStart="16dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="4dp"
+        android:textColor="?android:textColorPrimary"
+        android:textSize="14sp" />
 
 </LinearLayout>
