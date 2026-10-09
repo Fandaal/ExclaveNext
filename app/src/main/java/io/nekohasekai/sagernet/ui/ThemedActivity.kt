@@ -156,6 +156,31 @@ abstract class ThemedActivity : AppCompatActivity {
     private val heldSnackbars = ArrayDeque<Snackbar>()
     private var ownsWindowFocus = true
 
+    /** Subscription update runs that may still open diff dialogs over this
+     *  activity. The focus signal alone cannot gate the queue: a snackbar
+     *  born while the focus is still owned — the "no change" summary of a
+     *  source that finished early — is released at once, only to be covered
+     *  by the NEXT source's diff dialog. An explicit run-scoped counter
+     *  closes that: while any run is in flight, nothing is released no matter
+     *  what the focus says; the drain resumes when the run ends and the
+     *  focus is back. */
+    private var blockingRuns = 0
+
+    /** True while snackbars must not be shown: focus lost to any window, or
+     *  an announced run is still in flight. */
+    private fun isCovered() = !ownsWindowFocus || blockingRuns > 0
+
+    /** Announced by an operation that may yet open dialogs over this activity
+     *  (GroupUpdater's update runs). Pairs with endBlockingRun(). */
+    internal fun beginBlockingRun() {
+        blockingRuns++
+    }
+
+    internal fun endBlockingRun() {
+        blockingRuns = (blockingRuns - 1).coerceAtLeast(0)
+        if (!isCovered()) releaseHeldSnackbars()
+    }
+
     /** The snackbar the drain currently has on screen, null when the queue is
      *  idle. Doubles as the "a drain is in flight" flag: its dismissal
      *  callback is what pulls the next one, so a dismissed one must null this
@@ -180,7 +205,7 @@ abstract class ThemedActivity : AppCompatActivity {
      *  because the update order and its timings are the same every run. */
     internal fun showOnForeground(snackbar: Snackbar) {
         heldSnackbars.add(snackbar)
-        if (ownsWindowFocus && drainShown == null) showNextHeld()
+        if (!isCovered() && drainShown == null) showNextHeld()
     }
 
     /** Forgets a snackbar that must not surface. Returns true when it was
@@ -202,10 +227,11 @@ abstract class ThemedActivity : AppCompatActivity {
      *  on several at once overwrites it, so everything but the last would be
      *  lost, which is exactly what this serialises. */
     private fun showNextHeld() {
-        // A dialog that came up mid-drain must pause the queue: showing the
-        // next one now would send it behind that dialog. Focus returning
-        // restarts the drain through releaseHeldSnackbars().
-        if (!ownsWindowFocus) return
+        // A dialog that came up mid-drain — or an update run still in flight
+        // that may open one — must pause the queue: showing the next snackbar
+        // now would send it behind that dialog. Focus returning AND no run
+        // remaining restart the drain.
+        if (isCovered()) return
         val next = heldSnackbars.removeFirstOrNull() ?: return
         next.addCallback(drainCallback)
         drainShown = next

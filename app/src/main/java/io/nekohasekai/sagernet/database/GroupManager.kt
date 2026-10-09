@@ -47,6 +47,12 @@ object GroupManager {
         )
 
         suspend fun onUpdateFailure(group: ProxyGroup, source: SubscriptionSource?, message: String)
+
+        /** Called on the main thread around a multi-source update run that
+         *  may open diff dialogs: the snackbar queue releases nothing while a
+         *  run is in flight (see ThemedActivity.isCovered). */
+        suspend fun beginBlockingRun() {}
+        suspend fun endBlockingRun() {}
     }
 
     private val listeners = ArrayList<Listener>()

@@ -78,12 +78,37 @@ abstract class GroupUpdater {
         fun startUpdateAll(groupId: Long, byUser: Boolean) {
             runOnDefaultDispatcher {
                 val connected = SagerNet.started && DataStore.startedProfile > 0
-                for (source in SagerDatabase.sourceDao.byGroup(groupId)) {
-                    val sub = source.subscription ?: continue
-                    if (!byUser && sub.updateWhenConnectedOnly && !connected) continue
-                    executeUpdate(source, byUser)
+                // Announce the run to the UI before the first source can open
+                // a diff dialog: the snackbar queue holds every summary back
+                // while a run is in flight, so an early-finished source cannot
+                // have its snackbar covered by a LATER source's dialog (the
+                // window-focus signal arrives too late — only after the dialog
+                // has traversed). The release happens on the main thread once
+                // every source is done.
+                announceBlockingRun()
+                try {
+                    for (source in SagerDatabase.sourceDao.byGroup(groupId)) {
+                        val sub = source.subscription ?: continue
+                        if (!byUser && sub.updateWhenConnectedOnly && !connected) continue
+                        executeUpdate(source, byUser)
+                    }
+                } finally {
+                    onMainDispatcher { endBlockingRun() }
                 }
             }
+        }
+
+        /** Tells the snackbar queue a dialog-bearing run has begun/ended.
+         *  No-ops without a live UI — background refreshes (auto-update,
+         *  byUser=false) open no dialogs and must not block anything. */
+        private suspend fun announceBlockingRun() {
+            val ui = GroupManager.userInterface ?: return
+            onMainDispatcher { ui.beginBlockingRun() }
+        }
+
+        private suspend fun endBlockingRun() {
+            val ui = GroupManager.userInterface ?: return
+            onMainDispatcher { ui.endBlockingRun() }
         }
 
         suspend fun executeUpdate(source: SubscriptionSource, byUser: Boolean): Boolean {

@@ -104,14 +104,22 @@ class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interfac
         }
 
         onMainDispatcher {
-            // The summary line at the bottom of the screen is reported in BOTH
-            // cases — changed and unchanged. ThemedActivity holds a snackbar
-            // back while a dialog covers the activity, so this call needs no
-            // dismissal hook: it appears by itself once the last dialog of the
-            // stack is closed, and never behind one.
-            context.snackbar("$title: $summary").show()
+            // The summary is born when the diff dialog CLOSES, not when it
+            // opens. A snackbar lives in the activity window and a dialog is a
+            // separate, always-higher window: creating the snackbar
+            // before/with the dialog made it slip under and die by timeout
+            // (the focus loss only arrives after the dialog has traversed, so
+            // the queue could not know in time — two attempts at patching that
+            // race both failed). Creating it on dismissal cannot race by
+            // construction. It still enters the queue: an update run is
+            // usually still in flight (blockingRuns), so it waits with every
+            // other summary and they all drain together afterwards.
+            // NOTE: no `apply` here — inside it, `context` would resolve to
+            // the BUILDER's Context and not to this activity.
             MaterialAlertDialogBuilder(context).setTitle(title)
-                .setMessage(status.trim()).setPositiveButton(android.R.string.ok, null).show()
+                .setMessage(status.trim()).setPositiveButton(android.R.string.ok, null)
+                .setOnDismissListener { context.snackbar("$title: $summary").show() }
+                .show()
         }
     }
 
@@ -123,6 +131,17 @@ class GroupInterfaceAdapter(val context: ThemedActivity) : GroupManager.Interfac
         onMainDispatcher {
             context.snackbar(message).show()
         }
+    }
+
+    // GroupUpdater wraps a whole update run in these; forwarding to the
+    // activity keeps its snackbar queue from releasing a summary under a
+    // diff dialog that a later source of the same run is still going to open.
+    override suspend fun beginBlockingRun() {
+        onMainDispatcher { context.beginBlockingRun() }
+    }
+
+    override suspend fun endBlockingRun() {
+        onMainDispatcher { context.endBlockingRun() }
     }
 
 }
