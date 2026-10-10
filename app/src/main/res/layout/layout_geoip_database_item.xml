@@ -43,6 +43,8 @@
                     android:id="@+id/db_name"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:ellipsize="middle"
                     android:textAppearance="?android:attr/textAppearanceMedium"
                     android:textColor="?android:attr/textColorPrimary"
                     android:textStyle="bold"
