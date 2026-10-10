@@ -50,10 +50,16 @@ import com.danielstone.materialaboutlibrary.model.MaterialAboutCard
 import com.danielstone.materialaboutlibrary.model.MaterialAboutList
 import io.nekohasekai.sagernet.BuildConfig
 import io.nekohasekai.sagernet.R
+import io.nekohasekai.sagernet.SagerNet
 import io.nekohasekai.sagernet.database.DataStore
+import io.nekohasekai.sagernet.ktx.Logs
 import io.nekohasekai.sagernet.ktx.dp2px
 import io.nekohasekai.sagernet.ktx.dp2pxf
+import io.nekohasekai.sagernet.ktx.getString
+import io.nekohasekai.sagernet.ktx.onMainDispatcher
+import io.nekohasekai.sagernet.ktx.parseJson
 import io.nekohasekai.sagernet.ktx.snackbar
+import io.nekohasekai.sagernet.ktx.runOnDefaultDispatcher
 import libexclavecore.Libexclavecore
 
 class AboutFragment : ToolbarFragment(R.layout.layout_about) {
@@ -131,7 +137,7 @@ class AboutFragment : ToolbarFragment(R.layout.layout_about) {
                             .setOnClickAction {
                                 startActivity(Intent(
                                     Intent.ACTION_VIEW,
-                                    "https://github.com/ExclaveNetwork/Exclave/releases".toUri()
+                                    "https://github.com/Fandaal/ExclaveNext/releases".toUri()
                                 ))
                             }
                             .setOnLongClickAction {
@@ -198,12 +204,20 @@ class AboutFragment : ToolbarFragment(R.layout.layout_about) {
                         .outline(false)
                         .title(R.string.project)
                         .addItem(MaterialAboutActionItem.Builder()
+                            .icon(R.drawable.ic_baseline_update_24)
+                            .text(R.string.check_updates)
+                            .subText(R.string.check_updates_sum)
+                            .setOnClickAction {
+                                checkForUpdates()
+                            }
+                            .build())
+                        .addItem(MaterialAboutActionItem.Builder()
                             .icon(R.drawable.ic_baseline_sanitizer_24)
                             .text(R.string.github)
                             .setOnClickAction {
                                 startActivity(Intent(
                                     Intent.ACTION_VIEW,
-                                    "https://github.com/ExclaveNetwork/Exclave".toUri()
+                                    "https://github.com/Fandaal/ExclaveNext".toUri()
                                 ))
                             }
                             .build())
@@ -287,6 +301,72 @@ class AboutFragment : ToolbarFragment(R.layout.layout_about) {
                     .build()
             } catch (_: IllegalStateException) {
                 return MaterialAboutList.Builder().build()
+            }
+        }
+
+        /**
+         * Checks the fork's GitHub releases for a newer version. Compares the
+         * latest non-prerelease tag ("v" + version name) against
+         * BuildConfig.VERSION_NAME on a plain dotted-quad ordering — our
+         * scheme is X.Y.Z.N where N is our release number, so a numeric
+         * per-component comparison is exact; no semver machinery needed.
+         *
+         * Transport note: Libexclavecore.newHttpClient() routes through the
+         * running tunnel when one is up (same client AssetsActivity uses),
+         * so the check works even on a phone whose only connectivity is the
+         * VPN itself.
+         */
+        private fun checkForUpdates() {
+            runOnDefaultDispatcher {
+                val client = Libexclavecore.newHttpClient().apply {
+                    keepAlive()
+                    if (SagerNet.started && DataStore.startedProfile > 0) {
+                        useUDS(SagerNet.deviceStorage.noBackupFilesDir.toString() + "/ipc.sock")
+                    }
+                }
+                try {
+                    val response = client.newRequest().apply {
+                        setURL("https://api.github.com/repos/Fandaal/ExclaveNext/releases/latest")
+                    }.execute()
+
+                    val release = parseJson(response.contentString).asJsonObject
+                    val tagName = release.getString("tag_name")
+                        ?: error("tag_name not found in release ${release["url"]}")
+                    val latest = tagName.removePrefix("v")
+                    val current = BuildConfig.VERSION_NAME
+
+                    val newer = latest.split('.').zip(current.split('.'))
+                        .let { pairs ->
+                            pairs.map { (a, b) -> (a.toIntOrNull() ?: 0) - (b.toIntOrNull() ?: 0) }
+                                .firstOrNull { it != 0 } ?: (latest.count { it == '.' } - current.count { it == '.' })
+                        } > 0
+
+                    if (newer) {
+                        val name = release.getString("name") ?: tagName
+                        onMainDispatcher {
+                            AlertDialog.Builder(requireContext()).apply {
+                                setTitle(R.string.update_available)
+                                setMessage(getString(R.string.update_available_detail, latest, name))
+                                setPositiveButton(R.string.update_go) { _, _ ->
+                                    startActivity(Intent(
+                                        Intent.ACTION_VIEW,
+                                        "https://github.com/Fandaal/ExclaveNext/releases/latest".toUri()
+                                    ))
+                                }
+                                setNegativeButton(android.R.string.cancel, null)
+                            }.show()
+                        }
+                    } else {
+                        onMainDispatcher {
+                            snackbar(getString(R.string.up_to_date, current)).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Logs.w("update check: ${e.message}")
+                    onMainDispatcher {
+                        snackbar(getString(R.string.update_check_failed, e.message ?: "")).show()
+                    }
+                }
             }
         }
 

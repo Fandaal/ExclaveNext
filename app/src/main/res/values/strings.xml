@@ -669,6 +669,15 @@
     <string name="naiveproxy_idle_timeout">Idle timeout (s)</string>
     <string name="uri_template">URI Template</string>
 
+    <!-- Exclave Next: in-app update check -->
+    <string name="check_updates">Check for updates</string>
+    <string name="check_updates_sum">Compare the installed version with the latest GitHub release</string>
+    <string name="update_available">Update available</string>
+    <string name="update_available_detail">Version %1$s is available (%2$s). Download it from GitHub Releases.</string>
+    <string name="update_go">Download</string>
+    <string name="up_to_date">You are up to date (%s)</string>
+    <string name="update_check_failed">Update check failed: %s</string>
+
     <!-- Exclave Next: GeoIP settings -->
     <string name="geoip_settings">GeoIP</string>
     <string name="geoip_settings_sum">Provider chain and local MaxMind databases</string>

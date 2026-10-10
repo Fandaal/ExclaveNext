@@ -629,6 +629,15 @@
     <string name="naiveproxy_idle_timeout">Тайм-аут бездействия (с)</string>
     <string name="uri_template">Шаблон URI</string>
 
+    <!-- Exclave Next: in-app update check -->
+    <string name="check_updates">Проверить обновления</string>
+    <string name="check_updates_sum">Сверить установленную версию с последним релизом на GitHub</string>
+    <string name="update_available">Доступно обновление</string>
+    <string name="update_available_detail">Доступна версия %1$s (%2$s). Скачать с GitHub Releases.</string>
+    <string name="update_go">Скачать</string>
+    <string name="up_to_date">У вас последняя версия (%s)</string>
+    <string name="update_check_failed">Не удалось проверить обновления: %s</string>
+
     <!-- Exclave Next: GeoIP settings -->
     <string name="geoip_settings">GeoIP</string>
     <string name="geoip_settings_sum">Цепочка провайдеров и локальные базы MaxMind</string>
