@@ -967,7 +967,22 @@ class ConfigurationFragment @JvmOverloads constructor(
 
         init {
             binding.listView.layoutManager = FixedLinearLayoutManager(binding.listView)
-            binding.listView.itemAnimator = DefaultItemAnimator()
+            // Change animations MUST stay off in this list. A notifyItemChanged
+            // without payload makes DefaultItemAnimator cross-fade: the old
+            // holder is HIDDEN (ChildHelper.hide via addAnimatingView) and a
+            // new one fades in. Workers here post several updates per second,
+            // so hidden views exist continuously, and the dialog measures the
+            // list TWICE per frame (AlertDialogLayout.forceUniformWidth) — the
+            // double dispatchLayoutStep1/2 races the hidden-views bookkeeping
+            // and crashes with "trying to unhide a view that was not hidden" /
+            // "view is not a child, cannot hide". With change animations off,
+            // canReuseUpdatedViewHolder() returns true: the holder is rebound
+            // in place, nothing is ever hidden, and the crash site becomes
+            // unreachable. Insert fade-in (appear animation) is unaffected —
+            // it never hides views.
+            binding.listView.itemAnimator = DefaultItemAnimator().apply {
+                supportsChangeAnimations = false
+            }
             binding.listView.adapter = adapter
             binding.listView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
