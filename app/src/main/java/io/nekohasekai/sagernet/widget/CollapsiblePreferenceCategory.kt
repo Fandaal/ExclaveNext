@@ -73,7 +73,9 @@ class CollapsiblePreferenceCategory @JvmOverloads constructor(
         if (expanded == value) return
         expanded = value
         uiPrefs.edit().putBoolean(expandedKey, value).apply()
-        notifyChanged()
+        // notifyChanged() only rebinds this header row (chevron rotation);
+        // the flat visible list is rebuilt exclusively via notifyHierarchyChanged().
+        notifyHierarchyChanged()
     }
 
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
