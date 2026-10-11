@@ -33,21 +33,17 @@ import io.nekohasekai.sagernet.R
  * adapter excludes the whole subtree from the flat preference list, so children
  * hidden by the fragment (isVisible gates) cannot leak through a collapsed group.
  *
- * The expanded/collapsed state is persisted per category key in a separate
- * SharedPreferences file ("settings_ui"), deliberately outside of the configured
- * preference data store, so UI state never mixes with the backupable settings.
+ * The expanded/collapsed state is deliberately transient (instance field): every
+ * entry into the settings screen starts with all groups collapsed, as fragments
+ * are re-created per screen entry. Nothing is persisted — there is no saved state
+ * to go stale, and no extra file to manage.
  */
 class CollapsiblePreferenceCategory @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : PreferenceCategory(context, attrs) {
 
-    private val uiPrefs = context.getSharedPreferences("settings_ui", Context.MODE_PRIVATE)
-
-    private val expandedKey: String
-        get() = "collapsible_expanded_${key ?: javaClass.name}"
-
-    var expanded: Boolean = uiPrefs.getBoolean(expandedKey, false)
+    var expanded: Boolean = false
         private set
 
     init {
@@ -72,7 +68,6 @@ class CollapsiblePreferenceCategory @JvmOverloads constructor(
     fun setExpanded(value: Boolean) {
         if (expanded == value) return
         expanded = value
-        uiPrefs.edit().putBoolean(expandedKey, value).apply()
         // notifyChanged() only rebinds this header row (chevron rotation);
         // the flat visible list is rebuilt exclusively via notifyHierarchyChanged().
         notifyHierarchyChanged()
