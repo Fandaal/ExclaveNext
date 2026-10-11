@@ -1,33 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-    <PreferenceCategory app:title="@string/general_settings">
+    <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory
+        app:key="categoryConnection"
+        app:title="@string/cag_connection">
         <SwitchPreference
             app:icon="@drawable/ic_communication_phonelink_ring"
             app:key="isAutoConnect"
             app:summary="@string/auto_connect_summary"
             app:title="@string/auto_connect" />
-        <io.nekohasekai.sagernet.widget.ColorPickerPreference
-            android:title="@string/theme"
-            app:icon="@drawable/ic_baseline_color_lens_24"
-            app:key="appTheme" />
-        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
-            app:defaultValue="0"
-            app:entries="@array/night_mode"
-            app:entryValues="@array/int_array_4"
-            app:icon="@drawable/ic_baseline_wb_sunny_24"
-            app:key="nightTheme"
-            app:singleLineTitle="false"
-            app:title="@string/night_mode"
-            app:useSimpleSummaryProvider="true" />
-        <io.nekohasekai.sagernet.widget.ReselectableSimpleMenuPreference
-            app:defaultValue=""
-            app:entries="@array/language_entry"
-            app:entryValues="@array/language_value"
-            app:icon="@drawable/baseline_translate_24"
-            app:key="appLanguage"
-            app:singleLineTitle="false"
-            app:title="@string/language" />
         <io.nekohasekai.sagernet.widget.SimpleMenuPreference
             app:defaultValue="vpn"
             app:entries="@array/service_modes"
@@ -52,68 +33,6 @@
             app:title="@string/mtu"
             app:useSimpleSummaryProvider="true" />
         <SwitchPreference
-            app:icon="@drawable/ic_device_data_usage"
-            app:key="meteredNetwork"
-            app:summary="@string/metered_summary"
-            app:title="@string/metered" />
-        <SwitchPreference
-            app:icon="@drawable/baseline_save_24"
-            app:key="enablePcap"
-            app:summary="@string/pcap_summary"
-            app:title="@string/enable_pcap" />
-        <SwitchPreference
-            app:icon="@drawable/baseline_delete_sweep_24"
-            app:key="discardICMP"
-            app:summary="@string/discard_icmp_sum"
-            app:title="@string/discard_icmp" />
-        <SwitchPreference
-            app:icon="@drawable/ic_baseline_manage_search_24"
-            app:key="appTrafficStatistics"
-            app:summary="@string/traffic_statistics_summary"
-            app:title="@string/app_traffic_statistics" />
-        <SwitchPreference
-            app:defaultValue="true"
-            app:icon="@drawable/ic_baseline_manage_search_24"
-            app:key="profileTrafficStatistics"
-            app:summary="@string/profile_traffic_statistics_summary"
-            app:title="@string/profile_traffic_statistics" />
-        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
-            app:defaultValue="1000"
-            app:entries="@array/notification_entry"
-            app:entryValues="@array/notification_value"
-            app:icon="@drawable/ic_baseline_shutter_speed_24"
-            app:key="speedInterval"
-            app:singleLineTitle="false"
-            app:title="@string/speed_interval"
-            app:useSimpleSummaryProvider="true" />
-        <SwitchPreference
-            app:icon="@drawable/ic_baseline_speed_24"
-            app:key="showDirectSpeed"
-            app:summary="@string/show_direct_speed_sum"
-            app:title="@string/show_direct_speed"
-            app:useSimpleSummaryProvider="true" />
-        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
-            app:defaultValue="2"
-            app:icon="@drawable/ic_baseline_bug_report_24"
-            app:entries="@array/log_level_entry"
-            app:entryValues="@array/log_level_value"
-            app:key="logLevel"
-            app:singleLineTitle="false"
-            app:title="@string/log_level"
-            app:useSimpleSummaryProvider="true"/>
-        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
-            android:icon="@drawable/ic_baseline_push_pin_24"
-            app:defaultValue="1"
-            app:entries="@array/root_ca_provider_entry"
-            app:entryValues="@array/int_array_4"
-            app:key="providerRootCA"
-            app:singleLineTitle="false"
-            app:title="@string/root_ca_provider"
-            app:useSimpleSummaryProvider="true" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:title="@string/cag_route">
-        <SwitchPreference
             app:icon="@drawable/ic_image_looks_6"
             app:key="enableVPNInterfaceIPv6Address"
             app:summary="@string/enable_vpn_interface_ipv6_address_sum"
@@ -130,11 +49,98 @@
             app:summary="@string/allow_apps_bypass_vpn_sum"
             app:title="@string/allow_apps_bypass_vpn" />
         <SwitchPreference
+            app:icon="@drawable/ic_device_data_usage"
+            app:key="meteredNetwork"
+            app:summary="@string/metered_summary"
+            app:title="@string/metered" />
+        <SwitchPreference
+            app:icon="@drawable/baseline_delete_sweep_24"
+            app:key="discardICMP"
+            app:summary="@string/discard_icmp_sum"
+            app:title="@string/discard_icmp" />
+        <SwitchPreference
+            app:icon="@drawable/baseline_developer_board_24"
+            app:key="acquireWakeLock"
+            app:title="@string/acquire_wake_lock" />
+    </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
+
+    <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory
+        app:key="categoryTesting"
+        app:title="@string/cag_testing">
+        <io.nekohasekai.sagernet.widget.LinkPreference
+            app:defaultValue="https://www.google.com/generate_204"
+            app:icon="@drawable/ic_baseline_cast_connected_24"
+            app:key="connectionTestURL"
+            app:title="@string/connection_test_url"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="6"
+            app:icon="@drawable/ic_baseline_multiple_stop_24"
+            app:key="connectionTestConcurrency"
+            app:title="@string/connection_test_custom_concurrency"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="1"
+            app:icon="@drawable/ic_baseline_update_24"
+            app:key="connectionTestRounds"
+            app:title="@string/connection_test_rounds"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="5000"
+            app:icon="@drawable/ic_baseline_shutter_speed_24"
+            app:key="connectionTestTimeout"
+            app:title="@string/connection_test_custom_timeout"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="1"
+            app:icon="@drawable/ic_baseline_multiple_stop_24"
+            app:key="speedMaxWorkers"
+            app:title="@string/speed_test_threads"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="5000"
+            app:icon="@drawable/ic_baseline_shutter_speed_24"
+            app:key="speedTestTimeout"
+            app:title="@string/speed_test_timeout"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="10"
+            app:icon="@drawable/ic_baseline_speed_24"
+            app:key="speedDlSizeMb"
+            app:title="@string/speed_test_dl_size"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:defaultValue="@string/speed_dl_test_urls_default"
+            app:icon="@drawable/ic_baseline_link_24"
+            app:key="speedDlTestUrls"
+            app:singleLineTitle="false"
+            app:title="@string/speed_test_dl_urls"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:dialogMessage="@string/one_per_line"
+            app:icon="@drawable/ic_hardware_router"
+            app:key="stunServers"
+            app:title="@string/nat_stun_server_hint" />
+    </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
+
+    <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory
+        app:key="categoryRoute"
+        app:title="@string/cag_route">
+        <SwitchPreference
             app:defaultValue="true"
             app:icon="@drawable/ic_baseline_legend_toggle_24"
             app:key="bypassLan"
             app:summary="@string/bypass_private_sum"
             app:title="@string/route_opt_bypass_lan" />
+        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
+            app:defaultValue="0"
+            app:entries="@array/route_mode"
+            app:entryValues="@array/int_array_3"
+            app:icon="@drawable/baseline_wrap_text_24"
+            app:key="routeMode"
+            app:singleLineTitle="false"
+            app:title="@string/route_mode"
+            app:useSimpleSummaryProvider="true" />
         <io.nekohasekai.sagernet.widget.SimpleMenuPreference
             app:defaultValue="AsIs"
             app:entries="@array/domain_strategy"
@@ -208,114 +214,11 @@
             app:key="rulesGeoipUrl"
             app:title="@string/rules_geoip_url"
             app:useSimpleSummaryProvider="true" />
-        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
-            app:defaultValue="0"
-            app:entries="@array/route_mode"
-            app:entryValues="@array/int_array_3"
-            app:icon="@drawable/baseline_wrap_text_24"
-            app:key="routeMode"
-            app:singleLineTitle="false"
-            app:title="@string/route_mode"
-            app:useSimpleSummaryProvider="true" />
-    </PreferenceCategory>
+    </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
 
-    <PreferenceCategory app:title="@string/protocol_settings">
-        <io.nekohasekai.sagernet.widget.LinkPreference
-            app:defaultValue="https://www.google.com/generate_204"
-            app:icon="@drawable/ic_baseline_cast_connected_24"
-            app:key="connectionTestURL"
-            app:title="@string/connection_test_url"
-            app:useSimpleSummaryProvider="true" />
-        <EditTextPreference
-            app:defaultValue="6"
-            app:icon="@drawable/ic_baseline_multiple_stop_24"
-            app:key="connectionTestConcurrency"
-            app:title="@string/connection_test_custom_concurrency"
-            app:useSimpleSummaryProvider="true" />
-        <EditTextPreference
-            app:defaultValue="1"
-            app:icon="@drawable/ic_baseline_update_24"
-            app:key="connectionTestRounds"
-            app:title="@string/connection_test_rounds"
-            app:useSimpleSummaryProvider="true" />
-        <EditTextPreference
-            app:defaultValue="5000"
-            app:icon="@drawable/ic_baseline_shutter_speed_24"
-            app:key="connectionTestTimeout"
-            app:title="@string/connection_test_custom_timeout"
-            app:useSimpleSummaryProvider="true" />
-        <EditTextPreference
-            app:defaultValue="1"
-            app:icon="@drawable/ic_baseline_multiple_stop_24"
-            app:key="speedMaxWorkers"
-            app:title="@string/speed_test_threads"
-            app:useSimpleSummaryProvider="true" />
-        <EditTextPreference
-            app:defaultValue="5000"
-            app:icon="@drawable/ic_baseline_shutter_speed_24"
-            app:key="speedTestTimeout"
-            app:title="@string/speed_test_timeout"
-            app:useSimpleSummaryProvider="true" />
-        <EditTextPreference
-            app:defaultValue="10"
-            app:icon="@drawable/ic_baseline_speed_24"
-            app:key="speedDlSizeMb"
-            app:title="@string/speed_test_dl_size"
-            app:useSimpleSummaryProvider="true" />
-        <EditTextPreference
-            app:defaultValue="@string/speed_dl_test_urls_default"
-            app:icon="@drawable/ic_baseline_link_24"
-            app:key="speedDlTestUrls"
-            app:singleLineTitle="false"
-            app:title="@string/speed_test_dl_urls"
-            app:useSimpleSummaryProvider="true" />
-        <SwitchPreference
-            app:icon="@drawable/baseline_construction_24"
-            app:key="realityDisableX25519Mlkem768"
-            app:summary="@string/reality_breaking_change_summary"
-            app:title="@string/reality_disable_x25519mlkem768" />
-        <SwitchPreference
-            app:icon="@drawable/baseline_construction_24"
-            app:key="hysteria2OmitMaxDatagramFrameSize"
-            app:summary="@string/hysteria2_omit_max_datagram_frame_size_sum"
-            app:title="@string/enable_hysteria2_omit_max_datagram_frame_size" />
-        <SwitchPreference
-            app:icon="@drawable/ic_baseline_format_align_left_24"
-            app:key="grpcServiceNameCompat"
-            app:summary="@string/grpc_service_name_compat_sum"
-            app:title="@string/grpc_service_name_compat" />
-        <SwitchPreference
-            app:icon="@drawable/ic_baseline_texture_24"
-            app:key="enableFragment"
-            app:summary="@string/enable_fragment_sum"
-            app:title="@string/enable_fragment" />
-        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
-            app:defaultValue="0"
-            app:entries="@array/tls_fragmentation_entry"
-            app:entryValues="@array/tls_fragmentation_value"
-            app:icon="@drawable/ic_baseline_texture_24"
-            app:key="fragmentMethod"
-            app:singleLineTitle="false"
-            app:title="@string/fragment_method"
-            app:useSimpleSummaryProvider="true" />
-        <SwitchPreference
-            app:icon="@drawable/ic_baseline_texture_24"
-            app:key="enableFragmentForDirect"
-            app:title="@string/enable_fragment_for_direct" />
-        <SwitchPreference
-            app:defaultValue="true"
-            app:icon="@drawable/ic_baseline_cached"
-            app:key="interruptReusedConnections0"
-            app:title="@string/interrupt_reused_connections" />
-        <SwitchPreference
-            app:defaultValue="true"
-            app:icon="@drawable/ic_baseline_security_24"
-            app:key="profileSecurityAdvisory"
-            app:summary="@string/insecure_warn_sum"
-            app:title="@string/insecure_warn" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:title="@string/cag_dns">
+    <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory
+        app:key="categoryDns"
+        app:title="@string/cag_dns">
         <io.nekohasekai.sagernet.widget.NonBlackEditTextPreference
             app:defaultValue="tcp://1.1.1.1"
             app:icon="@drawable/ic_action_dns"
@@ -383,9 +286,11 @@
             app:key="enableFakeDns"
             app:summary="@string/fakedns_message"
             app:title="@string/enable_fakedns" />
-    </PreferenceCategory>
+    </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
 
-    <PreferenceCategory app:title="@string/inbound_settings">
+    <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory
+        app:key="categoryInbound"
+        app:title="@string/inbound_settings">
         <SwitchPreference
             app:defaultValue="true"
             app:icon="@drawable/baseline_flight_takeoff_24"
@@ -466,34 +371,81 @@
             app:key="allowAccess"
             app:summary="@string/allow_access_sum"
             app:title="@string/allow_access" />
-    </PreferenceCategory>
+    </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
 
-    <PreferenceCategory
-        app:title="@string/cag_misc"
-        app:initialExpandedChildrenCount="0">
+    <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory
+        app:key="categoryProtocol"
+        app:title="@string/protocol_settings">
         <SwitchPreference
-            app:icon="@drawable/ic_social_emoji_symbols"
-            app:key="showGroupName"
-            app:title="@string/show_group_name_in_notification" />
+            app:icon="@drawable/baseline_construction_24"
+            app:key="realityDisableX25519Mlkem768"
+            app:summary="@string/reality_breaking_change_summary"
+            app:title="@string/reality_disable_x25519mlkem768" />
         <SwitchPreference
-            app:icon="@drawable/ic_baseline_center_focus_weak_24"
-            app:key="alwaysShowAddress"
-            app:summary="@string/always_show_address_sum"
-            app:title="@string/always_show_address" />
+            app:icon="@drawable/baseline_construction_24"
+            app:key="hysteria2OmitMaxDatagramFrameSize"
+            app:summary="@string/hysteria2_omit_max_datagram_frame_size_sum"
+            app:title="@string/enable_hysteria2_omit_max_datagram_frame_size" />
         <SwitchPreference
-            app:icon="@drawable/baseline_developer_board_24"
-            app:key="acquireWakeLock"
-            app:title="@string/acquire_wake_lock" />
-        <Preference
-            app:icon="@drawable/baseline_public_24"
-            app:key="geoip_settings"
-            app:summary="@string/geoip_settings_sum"
-            app:title="@string/geoip_settings" />
-        <EditTextPreference
-            app:dialogMessage="@string/one_per_line"
-            app:icon="@drawable/ic_hardware_router"
-            app:key="stunServers"
-            app:title="@string/nat_stun_server_hint" />
+            app:icon="@drawable/ic_baseline_format_align_left_24"
+            app:key="grpcServiceNameCompat"
+            app:summary="@string/grpc_service_name_compat_sum"
+            app:title="@string/grpc_service_name_compat" />
+        <SwitchPreference
+            app:icon="@drawable/ic_baseline_texture_24"
+            app:key="enableFragment"
+            app:summary="@string/enable_fragment_sum"
+            app:title="@string/enable_fragment" />
+        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
+            app:defaultValue="0"
+            app:entries="@array/tls_fragmentation_entry"
+            app:entryValues="@array/tls_fragmentation_value"
+            app:icon="@drawable/ic_baseline_texture_24"
+            app:key="fragmentMethod"
+            app:singleLineTitle="false"
+            app:title="@string/fragment_method"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreference
+            app:icon="@drawable/ic_baseline_texture_24"
+            app:key="enableFragmentForDirect"
+            app:title="@string/enable_fragment_for_direct" />
+        <SwitchPreference
+            app:defaultValue="true"
+            app:icon="@drawable/ic_baseline_cached"
+            app:key="interruptReusedConnections0"
+            app:title="@string/interrupt_reused_connections" />
+        <SwitchPreference
+            app:defaultValue="true"
+            app:icon="@drawable/ic_baseline_security_24"
+            app:key="profileSecurityAdvisory"
+            app:summary="@string/insecure_warn_sum"
+            app:title="@string/insecure_warn" />
+    </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
+
+    <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory
+        app:key="categoryDisplay"
+        app:title="@string/cag_display">
+        <io.nekohasekai.sagernet.widget.ColorPickerPreference
+            android:title="@string/theme"
+            app:icon="@drawable/ic_baseline_color_lens_24"
+            app:key="appTheme" />
+        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
+            app:defaultValue="0"
+            app:entries="@array/night_mode"
+            app:entryValues="@array/int_array_4"
+            app:icon="@drawable/ic_baseline_wb_sunny_24"
+            app:key="nightTheme"
+            app:singleLineTitle="false"
+            app:title="@string/night_mode"
+            app:useSimpleSummaryProvider="true" />
+        <io.nekohasekai.sagernet.widget.ReselectableSimpleMenuPreference
+            app:defaultValue=""
+            app:entries="@array/language_entry"
+            app:entryValues="@array/language_value"
+            app:icon="@drawable/baseline_translate_24"
+            app:key="appLanguage"
+            app:singleLineTitle="false"
+            app:title="@string/language" />
         <io.nekohasekai.sagernet.widget.SimpleMenuPreference
             app:defaultValue="1"
             app:entries="@array/fab_style_entry"
@@ -509,9 +461,59 @@
             app:summary="@string/use_iec_unit_sum"
             app:title="@string/use_iec_unit" />
         <SwitchPreference
-            app:icon="@drawable/ic_navigation_apps"
-            app:key="queryAllPackagesAlternativeMethod"
-            app:title="@string/query_all_packages_alternative_method" />
+            app:icon="@drawable/ic_social_emoji_symbols"
+            app:key="showGroupName"
+            app:title="@string/show_group_name_in_notification" />
+        <SwitchPreference
+            app:icon="@drawable/ic_baseline_center_focus_weak_24"
+            app:key="alwaysShowAddress"
+            app:summary="@string/always_show_address_sum"
+            app:title="@string/always_show_address" />
+        <SwitchPreference
+            app:icon="@drawable/ic_baseline_manage_search_24"
+            app:key="appTrafficStatistics"
+            app:summary="@string/traffic_statistics_summary"
+            app:title="@string/app_traffic_statistics" />
+        <SwitchPreference
+            app:defaultValue="true"
+            app:icon="@drawable/ic_baseline_manage_search_24"
+            app:key="profileTrafficStatistics"
+            app:summary="@string/profile_traffic_statistics_summary"
+            app:title="@string/profile_traffic_statistics" />
+        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
+            app:defaultValue="1000"
+            app:entries="@array/notification_entry"
+            app:entryValues="@array/notification_value"
+            app:icon="@drawable/ic_baseline_shutter_speed_24"
+            app:key="speedInterval"
+            app:singleLineTitle="false"
+            app:title="@string/speed_interval"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreference
+            app:icon="@drawable/ic_baseline_speed_24"
+            app:key="showDirectSpeed"
+            app:summary="@string/show_direct_speed_sum"
+            app:title="@string/show_direct_speed"
+            app:useSimpleSummaryProvider="true" />
+    </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
+
+    <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory
+        app:key="categoryDiagnostics"
+        app:title="@string/cag_diagnostics">
+        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
+            app:defaultValue="2"
+            app:icon="@drawable/ic_baseline_bug_report_24"
+            app:entries="@array/log_level_entry"
+            app:entryValues="@array/log_level_value"
+            app:key="logLevel"
+            app:singleLineTitle="false"
+            app:title="@string/log_level"
+            app:useSimpleSummaryProvider="true"/>
+        <SwitchPreference
+            app:icon="@drawable/baseline_save_24"
+            app:key="enablePcap"
+            app:summary="@string/pcap_summary"
+            app:title="@string/enable_pcap" />
         <EditTextPreference
             app:dialogMessage="Example: 127.0.0.1:6060\nOpen http://127.0.0.1:6060/debug/pprof in your browser."
             app:key="pprofServer"
@@ -521,6 +523,29 @@
             app:dialogMessage="For testing purpose only.\nBreaking changes are expected.\nNo guarantee of existence."
             app:key="experimentalFlags"
             app:title="Experimental flags" />
-    </PreferenceCategory>
+    </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
+
+    <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory
+        app:key="categoryMisc"
+        app:title="@string/cag_misc">
+        <io.nekohasekai.sagernet.widget.SimpleMenuPreference
+            android:icon="@drawable/ic_baseline_push_pin_24"
+            app:defaultValue="1"
+            app:entries="@array/root_ca_provider_entry"
+            app:entryValues="@array/int_array_4"
+            app:key="providerRootCA"
+            app:singleLineTitle="false"
+            app:title="@string/root_ca_provider"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreference
+            app:icon="@drawable/ic_navigation_apps"
+            app:key="queryAllPackagesAlternativeMethod"
+            app:title="@string/query_all_packages_alternative_method" />
+        <Preference
+            app:icon="@drawable/baseline_public_24"
+            app:key="geoip_settings"
+            app:summary="@string/geoip_settings_sum"
+            app:title="@string/geoip_settings" />
+    </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
 
 </PreferenceScreen>

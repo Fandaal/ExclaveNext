@@ -48,6 +48,10 @@
     <string name="port_http">HTTP proxy port</string>
     <string name="port_transproxy">Transparent proxy port</string>
     <string name="cag_route">Route settings</string>
+    <string name="cag_connection">Connection and VPN</string>
+    <string name="cag_testing">Testing</string>
+    <string name="cag_display">Display and interface</string>
+    <string name="cag_diagnostics">Diagnostics</string>
     <string name="allow_access">Allow connections from LAN</string>
     <string name="allow_access_sum">Bind inbounds to 0.0.0.0</string>
     <string name="inbound_settings">Inbound settings</string>

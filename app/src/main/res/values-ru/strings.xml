@@ -18,6 +18,10 @@
     <string name="direct_dns">Прямой DNS</string>
     <string name="remote_dns">Удаленный DNS</string>
     <string name="cag_dns">Настройки DNS</string>
+    <string name="cag_connection">Подключение и VPN</string>
+    <string name="cag_testing">Тестирование</string>
+    <string name="cag_display">Отображение и интерфейс</string>
+    <string name="cag_diagnostics">Диагностика</string>
     <string name="connection_test_error">Ошибка: %s</string>
     <string name="connection_test_available_http">Время отклика по HTTP %d мс</string>
     <string name="connection_test_available">Время отклика по HTTPS %d мс</string>
