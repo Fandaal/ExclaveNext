@@ -68,8 +68,8 @@ object GeoIpAnnotator {
     const val COUNTRY_DB_URL = GeoIpDefaults.COUNTRY_DB_URL
     const val ASN_DB_URL = GeoIpDefaults.ASN_DB_URL
 
-    private val dnsCache = ConcurrentHashMap<String, String>()      // host -> ip ("" = failed)
-    private val geoCache = ConcurrentHashMap<String, GeoInfo>()     // ip -> GeoInfo
+    private val dnsCache = ConcurrentHashMap<String, String>()      // host -> ip (successes only)
+    private val geoCache = ConcurrentHashMap<String, GeoInfo>()     // ip -> GeoInfo (known answers only)
 
     @Volatile private var countryReader: DatabaseReader? = null
     @Volatile private var asnReader: DatabaseReader? = null
@@ -147,12 +147,17 @@ object GeoIpAnnotator {
         return true
     }
 
-    /** host -> IPv4 string, or null. Cached. Mirrors resolve_domain_to_ip. */
+    /**
+     * host -> IPv4 string, or null. Successful resolutions are cached; a
+     * failure is NOT — the next call retries it instead of replaying the
+     * error, so a DNS hiccup (or an app started offline) does not turn into
+     * a permanent "DNS error" until restart.
+     */
     fun resolveToIp(host: String): String? {
         val clean = host.substringBefore(':').trim()
         if (clean.isEmpty()) return null
         if (isValidIp(clean)) return clean
-        dnsCache[clean]?.let { return it.ifEmpty { null } }
+        dnsCache[clean]?.let { return it }
         return try {
             val addr = InetAddress.getAllByName(clean).firstOrNull { it is Inet4Address }
                 ?: InetAddress.getAllByName(clean).firstOrNull()
@@ -161,11 +166,9 @@ object GeoIpAnnotator {
                 dnsCache[clean] = ip
                 ip
             } else {
-                dnsCache[clean] = ""
                 null
             }
         } catch (_: Exception) {
-            dnsCache[clean] = ""
             null
         }
     }
@@ -197,7 +200,12 @@ object GeoIpAnnotator {
         ensureInit()
 
         val result = GeoIpChainResolver.resolve(ip, DataStore.geoIpChain) { resolverFor(it) }
-        geoCache[ip] = result
+        // Only a KNOWN answer is cached. "Unknown" means the whole chain
+        // failed (network down, every API rate-limited) — replaying that
+        // from memory would pin the failure until a restart or a settings
+        // change; retrying costs the chain walk the next lookup already
+        // has to pay for any uncached IP anyway.
+        if (result.isKnown) geoCache[ip] = result
         return result
     }
 
