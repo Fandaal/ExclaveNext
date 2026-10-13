@@ -198,11 +198,11 @@ fun parseChainJson(json: String?): List<GeoIpEntry> {
             }
             reader.endObject()
         }
-        // Migration: the old freeipapi.com endpoint answers 307 to
-        // free.freeipapi.com, which HttpURLConnection does not follow, so any
-        // stored entry pointing there is a guaranteed dead link. Rewrite it on
-        // read — the chain lives in preferences, and this is the single place
-        // every consumer goes through.
+        // Migration: freeipapi.com is deprecated upstream and 307-redirects
+        // to free.freeipapi.com — an extra round-trip to a host the docs say
+        // not to use. Rewrite stored entries to the canonical URL on read:
+        // the chain lives in preferences, and this is the single place every
+        // consumer goes through.
         for (i in entries.indices) {
             if (entries[i].url == GeoIpDefaults.LEGACY_FREEIPAPI_URL) {
                 entries[i] = entries[i].copy(url = GeoIpDefaults.FREEIPAPI_URL)

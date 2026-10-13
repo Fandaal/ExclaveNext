@@ -96,8 +96,8 @@ class GeoIpChainSerializationTest {
 
     @Test
     fun theDefaultChainCarriesNoLegacyEndpoints() {
-        // freeipapi.com 307-redirects to free.freeipapi.com, which
-        // HttpURLConnection does not follow — the entry is dead weight.
+        // freeipapi.com is deprecated upstream; the defaults carry only the
+        // canonical free.freeipapi.com endpoint.
         val chain = GeoIpDefaults.defaultChain()
 
         assertFalse(chain.any { it.url == GeoIpDefaults.LEGACY_FREEIPAPI_URL })

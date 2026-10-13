@@ -136,7 +136,7 @@ class ApiResolver(private val template: String) : GeoIpResolver {
             val conn = URL(url).openConnection() as HttpURLConnection
             conn.connectTimeout = REQUEST_TIMEOUT_MS
             conn.readTimeout = REQUEST_TIMEOUT_MS
-            conn.instanceFollowRedirects = true   // freeipapi 307-redirects
+            conn.instanceFollowRedirects = true   // user-defined endpoints may redirect; defaults point at canonical URLs
             conn.setRequestProperty("User-Agent", "Exclave")
             try {
                 val code = conn.responseCode
@@ -159,13 +159,27 @@ class ApiResolver(private val template: String) : GeoIpResolver {
                 conn.disconnect()
             }
         } catch (e: GeoIpLookupException) {
-            state.consecutiveErrors++
-            state.lastCall = System.currentTimeMillis()
-            if (state.consecutiveErrors >= CIRCUIT_THRESHOLD) {
-                state.circuitOpenUntil = System.currentTimeMillis() + CIRCUIT_TIMEOUT_MS
-                Logs.w("GeoIP circuit breaker open for $template")
-            }
+            countFailure(state)
             throw e
+        } catch (e: Exception) {
+            // A network-level failure — timeout, connection refused, DNS of
+            // the API host — used to escape the breaker uncounted: a
+            // network-dead provider was retried at full connect timeout on
+            // every single lookup while the circuit never opened. Count it
+            // like any other failure and rethrow as a lookup error so the
+            // chain simply walks on to the next entry.
+            countFailure(state)
+            throw GeoIpLookupException("network failure: ${e.message}", e)
+        }
+    }
+
+    /** Record one failed attempt; open the circuit when the threshold is hit. */
+    private fun countFailure(state: ApiState) {
+        state.consecutiveErrors++
+        state.lastCall = System.currentTimeMillis()
+        if (state.consecutiveErrors >= CIRCUIT_THRESHOLD) {
+            state.circuitOpenUntil = System.currentTimeMillis() + CIRCUIT_TIMEOUT_MS
+            Logs.w("GeoIP circuit breaker open for $template")
         }
     }
 
