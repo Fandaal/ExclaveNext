@@ -78,8 +78,11 @@ object GeoIpAnnotator {
     fun countryDbFile(): File = File(SagerNet.application.externalAssets, COUNTRY_DB)
     fun asnDbFile(): File = File(SagerNet.application.externalAssets, ASN_DB)
 
-    /** True when at least one chain entry can actually answer. */
-    fun isChainUsable(): Boolean = DataStore.geoIpChain.any { it.enabled }
+    /** True when at least one chain entry can actually answer: enabled AND its resolver can be built. */
+    fun isChainUsable(): Boolean {
+        ensureInit()
+        return DataStore.geoIpChain.any { it.enabled && resolverFor(it) != null }
+    }
 
     /** Opens the MMDB readers once. Safe to call repeatedly. */
     @Synchronized
@@ -117,8 +120,20 @@ object GeoIpAnnotator {
         }
         countryReader = null
         asnReader = null
+        // Cached answers were produced by the previous readers; a deleted
+        // database must not keep answering from memory.
+        clearGeoCache()
         initialized = false
         ensureInit()
+    }
+
+    /**
+     * Drop every cached GeoInfo. Called when the world changes under the cache:
+     * a chain edit, a database install/delete. DNS answers stay cached — a
+     * host's address does not depend on the GeoIP configuration.
+     */
+    fun clearGeoCache() {
+        geoCache.clear()
     }
 
     private fun isValidIp(ip: String): Boolean {

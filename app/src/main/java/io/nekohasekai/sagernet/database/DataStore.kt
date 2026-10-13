@@ -184,6 +184,9 @@ object DataStore : OnPreferenceDataStoreChangeListener {
 
     fun setGeoIpChain(chain: List<io.nekohasekai.sagernet.bg.GeoIpEntry>) {
         geoIpConfigJson = io.nekohasekai.sagernet.bg.toChainJson(chain)
+        // Cached lookups were produced by the OLD chain; after any chain edit
+        // (reorder, disable, add, delete) they must not keep answering.
+        io.nekohasekai.sagernet.bg.GeoIpAnnotator.clearGeoCache()
     }
     var logLevel by configurationStore.stringToInt(Key.LOG_LEVEL) { 2 }
     var logLevelDebugWarningDisable by configurationStore.boolean(Key.LOG_LEVEL_DEBUG_WARNING_DISABLE)

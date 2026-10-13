@@ -1459,10 +1459,6 @@ class ConfigurationFragment @JvmOverloads constructor(
         val test = TestDialog()
         val dialog = test.builder.show()
 
-        if (!io.nekohasekai.sagernet.bg.GeoIpAnnotator.isChainUsable()) {
-            snackbar(getString(R.string.geoip_db_missing)).show()
-        }
-
         val mainJob = runOnDefaultDispatcher {
             val group = DataStore.currentGroup()
             // Selection mode passes the checked profiles; the toolbar entry
@@ -1472,6 +1468,16 @@ class ConfigurationFragment @JvmOverloads constructor(
             var finished = 0
 
             io.nekohasekai.sagernet.bg.GeoIpAnnotator.ensureInit()
+
+            // Checked here, not on the UI thread: isChainUsable() opens the
+            // MMDB readers and probes what the enabled entries can actually
+            // resolve (an enabled entry whose file is gone no longer counts).
+            // geoip_no_provider, not geoip_db_missing: the condition is "no
+            // chain link can answer at all", which includes disabled APIs and
+            // missing local databases alike.
+            if (!io.nekohasekai.sagernet.bg.GeoIpAnnotator.isChainUsable()) {
+                onMainDispatcher { snackbar(getString(R.string.geoip_no_provider)).show() }
+            }
 
             val queue = ConcurrentLinkedQueue(profiles)
             val jobs = mutableListOf<Job>()

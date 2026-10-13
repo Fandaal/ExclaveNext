@@ -93,4 +93,32 @@ class GeoIpChainSerializationTest {
         assertTrue(chain.drop(2).all { it.type == GeoIpEntryType.API })
         assertFalse(chain.any { !it.enabled })
     }
+
+    @Test
+    fun theDefaultChainCarriesNoLegacyEndpoints() {
+        // freeipapi.com 307-redirects to free.freeipapi.com, which
+        // HttpURLConnection does not follow — the entry is dead weight.
+        val chain = GeoIpDefaults.defaultChain()
+
+        assertFalse(chain.any { it.url == GeoIpDefaults.LEGACY_FREEIPAPI_URL })
+        assertTrue(chain.any { it.url == GeoIpDefaults.FREEIPAPI_URL })
+    }
+
+    @Test
+    fun aStoredLegacyEndpointIsMigratedOnRead() {
+        val json = """
+            {"entries":[
+              {"type":"api","url":"${GeoIpDefaults.LEGACY_FREEIPAPI_URL}"},
+              {"type":"api","url":"https://ipwho.is/{ip}"}
+            ]}
+        """.trimIndent()
+
+        val restored = parseChainJson(json)
+
+        assertEquals(2, restored.size)
+        // The retired endpoint is rewritten to its live target…
+        assertEquals(GeoIpDefaults.FREEIPAPI_URL, restored[0].url)
+        // …and the other entries survive untouched.
+        assertEquals("https://ipwho.is/{ip}", restored[1].url)
+    }
 }

@@ -109,7 +109,6 @@
     <string name="action_resolve_domains">Resolve domains to IP</string>
     <string name="resolve_done">Resolved %1$d of %2$d profiles</string>
     <string name="action_speed_test">Speed test</string>
-    <string name="geoip_db_missing">GeoLite2 databases not found. Download them from Route \u2192 Assets, or annotation will use the online API only.</string>
     <string name="annotate_done">Annotated %1$d profiles</string>
     <string name="speed_test_done">Speed test finished: %1$d profiles</string>
     <string name="connection_test_custom_timeout_invalid">Timeout must be a positive integer</string>

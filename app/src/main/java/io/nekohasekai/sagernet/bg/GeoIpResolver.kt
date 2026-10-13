@@ -39,11 +39,20 @@ object GeoIpDefaults {
     const val ASN_DB_URL =
         "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb"
 
+    /** The endpoint freeipapi.com 307-redirects to (HttpURLConnection cannot follow it). */
+    const val FREEIPAPI_URL = "https://free.freeipapi.com/api/v1/json/{ip}"
+
+    /** Retired endpoint: 307-redirects to [FREEIPAPI_URL] and times out on Android. */
+    const val LEGACY_FREEIPAPI_URL = "https://freeipapi.com/api/json/{ip}"
+
     fun defaultChain(): List<GeoIpEntry> = listOf(
         GeoIpEntry(type = GeoIpEntryType.MMDB_COUNTRY, url = COUNTRY_DB_URL, file = COUNTRY_DB),
         GeoIpEntry(type = GeoIpEntryType.MMDB_ASN, url = ASN_DB_URL, file = ASN_DB),
         GeoIpEntry(type = GeoIpEntryType.API, url = "https://ipwho.is/{ip}"),
         GeoIpEntry(type = GeoIpEntryType.API, url = "https://i.pn/json/{ip}"),
-        GeoIpEntry(type = GeoIpEntryType.API, url = "https://freeipapi.com/api/json/{ip}"),
+        // free.freeipapi.com directly: the old freeipapi.com endpoint now
+        // answers 307 to this host, and HttpURLConnection does not follow
+        // 307/308 redirects — the old entry was a guaranteed dead link.
+        GeoIpEntry(type = GeoIpEntryType.API, url = FREEIPAPI_URL),
     )
 }

@@ -96,7 +96,6 @@
     <string name="resolve_done">Разрешено %1$d из %2$d профилей</string>
     <string name="annotate_done">Аннотировано профилей: %1$d</string>
     <string name="speed_test_done">Тест скорости завершён, профилей: %1$d</string>
-    <string name="geoip_db_missing">Базы GeoLite2 не найдены. Установите их в разделе GeoIP \u2192 Локальные базы</string>
     <string name="connection_test_custom_concurrency">Количество потоков теста URL</string>
     <string name="connection_test_rounds">Количество раундов теста URL</string>
     <string name="connection_test_custom_concurrency_invalid">Поточность должна быть положительным целым числом</string>

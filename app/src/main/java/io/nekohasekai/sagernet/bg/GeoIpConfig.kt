@@ -92,6 +92,13 @@ object GeoIpChainResolver {
                 factory(entry)?.resolve(ip)
             } catch (e: GeoIpLookupException) {
                 null
+            } catch (e: Exception) {
+                // A network failure is not a GeoIpLookupException: without this
+                // arm a single IOException (timeout, refused, DNS of an API
+                // host) aborted the WHOLE lookup and the remaining chain
+                // entries were never tried — the online fallback looked dead
+                // while only its first entry was.
+                null
             } ?: continue
 
             if (country.isEmpty() && fragment.country.isNotEmpty()) {
@@ -190,6 +197,16 @@ fun parseChainJson(json: String?): List<GeoIpEntry> {
                 reader.endArray()
             }
             reader.endObject()
+        }
+        // Migration: the old freeipapi.com endpoint answers 307 to
+        // free.freeipapi.com, which HttpURLConnection does not follow, so any
+        // stored entry pointing there is a guaranteed dead link. Rewrite it on
+        // read — the chain lives in preferences, and this is the single place
+        // every consumer goes through.
+        for (i in entries.indices) {
+            if (entries[i].url == GeoIpDefaults.LEGACY_FREEIPAPI_URL) {
+                entries[i] = entries[i].copy(url = GeoIpDefaults.FREEIPAPI_URL)
+            }
         }
         entries.ifEmpty { GeoIpDefaults.defaultChain() }
     } catch (e: Exception) {

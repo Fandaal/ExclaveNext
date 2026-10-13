@@ -130,6 +130,32 @@ class GeoIpChainTest {
     }
 
     @Test
+    fun aNetworkFailureDoesNotAbortTheChain() {
+        // A resolver that dies with something OTHER than GeoIpLookupException —
+        // an IOException straight from the network stack. The chain used to
+        // propagate it and the remaining entries were never consulted, which
+        // is what made the online fallback look dead.
+        val result = resolve(
+            listOf(entry(GeoIpEntryType.API), entry(GeoIpEntryType.MMDB_COUNTRY)),
+        ) { e ->
+            when (e.type) {
+                GeoIpEntryType.API -> object : GeoIpResolver {
+                    override val type: String = "net-dying"
+                    override fun resolve(ip: String): GeoInfoFragment {
+                        callLog.add("net-dying")
+                        throw java.io.IOException("connection timed out")
+                    }
+                }
+                else -> Fake("mmdb", country = "Sweden", provider = "Alexhost")
+            }
+        }
+
+        assertEquals(listOf("net-dying", "mmdb"), callLog)
+        assertEquals("Sweden", result.country)
+        assertEquals("Alexhost", result.provider)
+    }
+
+    @Test
     fun orderIsSignificant() {
         val asnFirst = resolve(
             listOf(entry(GeoIpEntryType.MMDB_ASN), entry(GeoIpEntryType.MMDB_COUNTRY)),
