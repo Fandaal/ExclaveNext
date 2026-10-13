@@ -1096,7 +1096,12 @@ class ConfigurationFragment @JvmOverloads constructor(
             // not results, so they keep the default colour.
             builder.append("$alive").setSpan(green, 0, "$alive".length, SPAN)
             builder.append("/$total")
-            if (rounds > 1) {
+            // Exclave Next: render the round pairs even for a single round —
+            // the URL test always reports roundAttempt/roundTotal now, and
+            // "15/70 • 1/1 • 32/70" reads the same in both modes. Tests that
+            // have no rounds (annotate/resolve/speed) pass roundTotal = 0 and
+            // keep the plain "15/70" they always had.
+            if (roundTotal > 0) {
                 builder.append(" • $round/$rounds • $roundAttempt/")
                 // Only the DENOMINATOR is red: it is the number of profiles this
                 // round still had to check, i.e. the ones that have not answered
