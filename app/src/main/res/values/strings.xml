@@ -5,6 +5,8 @@
     <string name="github">Source code</string>
     <string name="app_version">Version</string>
     <string name="version_x">Version (%s)</string>
+    <string name="developer_mode_enabled">Developer mode enabled</string>
+    <string name="developer_mode_disabled">Developer mode disabled</string>
     <string name="logcat">Export debug information</string>
     <string name="menu_configuration">Configuration</string>
     <string name="menu_group">Group</string>
@@ -724,6 +726,7 @@
     <string name="geoip_updated">Updated</string>
     <string name="geoip_invalid_db">Not a MaxMind database, file rejected</string>
     <string name="geoip_update_failed">Update failed: %s</string>
+    <string name="geoip_update_no_url">no update URL</string>
     <string name="geoip_delete_confirm">Delete %s?</string>
     <string name="geoip_moved">Moved from position %1$d to %2$d</string>
     <string name="geoip_entry_removed">Entry removed</string>

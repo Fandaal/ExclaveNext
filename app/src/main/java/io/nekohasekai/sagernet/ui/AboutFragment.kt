@@ -142,7 +142,7 @@ class AboutFragment : ToolbarFragment(R.layout.layout_about) {
                             }
                             .setOnLongClickAction {
                                 DataStore.enableDebug = !DataStore.enableDebug
-                                snackbar(if (DataStore.enableDebug) "developer mode enabled" else "developer mode disabled").show()
+                                snackbar(if (DataStore.enableDebug) R.string.developer_mode_enabled else R.string.developer_mode_disabled).show()
                             }
                             .build())
                         .addItem(MaterialAboutActionItem.Builder()

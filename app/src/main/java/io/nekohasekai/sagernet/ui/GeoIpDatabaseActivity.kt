@@ -136,7 +136,7 @@ class GeoIpDatabaseActivity : ThemedActivity() {
     private fun updateOne(database: InstalledDatabase) {
         val url = urlFor(database.fileName)
         if (url.isEmpty()) {
-            snackbar(getString(R.string.geoip_update_failed, "no update URL"))
+            snackbar(getString(R.string.geoip_update_failed, getString(R.string.geoip_update_no_url)))
             return
         }
         if (database.fileName in busy) return
