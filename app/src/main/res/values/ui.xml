@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared one-off UI strings not tied to any screen. -->
+    <string name="reset_settings">Reset Settings</string>
+    <string name="loading">Loading…</string>
+</resources>

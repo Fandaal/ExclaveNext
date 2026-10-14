@@ -211,6 +211,8 @@
     <string name="ss_cat">Настройки Shadowsocks</string>
     <string name="proxy_cat">Настройки сервера</string>
     <string name="plugin_unknown">Неизвестный плагин %s</string>
+    <string name="plugin_conflicting">Найдены конфликтующие плагины в: %s</string>
+    <string name="plugin_simple_obfuscation">Простая обфускация</string>
     <string name="plugin_disabled">Отключено</string>
     <string name="plugin_configure">Настроить…</string>
     <string name="plugin">Плагин</string>
@@ -241,6 +243,7 @@
     <string name="action_export_err">Не удалось экспортировать.</string>
     <string name="action_export_msg">Экспорт выполнен!</string>
     <string name="action_import_file">Импорт из файла</string>
+    <string name="action_import_folder">Импорт из папки (.txt)</string>
     <string name="action_import">Импорт из буфера обмена</string>
     <string name="action_export">Экспорт</string>
     <string name="action_export_clipboard">Экспорт в буфер обмена</string>

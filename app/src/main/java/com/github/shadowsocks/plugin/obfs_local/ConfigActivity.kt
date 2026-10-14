@@ -49,7 +49,7 @@ class ConfigActivity : ConfigurationActivity(), Toolbar.OnMenuItemClickListener 
         setContentView(R.layout.layout_obfs_local)
 
         findViewById<Toolbar>(R.id.toolbar).apply {
-            title = "Simple obfuscation"
+            setTitle(io.nekohasekai.sagernet.R.string.plugin_simple_obfuscation)
             setNavigationIcon(R.drawable.ic_navigation_close)
             setNavigationOnClickListener { onFinish() }
             inflateMenu(R.menu.plugin_menu)

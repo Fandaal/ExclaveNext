@@ -133,8 +133,9 @@ object PluginManager {
         }
         if (providers.isEmpty()) return null
         if (providers.size > 1) {
-            val message =
-                "Conflicting plugins found from: ${providers.joinToString { it.providerInfo.packageName }}"
+            val message = SagerNet.application.getString(
+                io.nekohasekai.sagernet.R.string.plugin_conflicting,
+                providers.joinToString { it.providerInfo.packageName })
             Toast.makeText(SagerNet.application, message, Toast.LENGTH_LONG).show()
             throw IllegalStateException(message)
         }
