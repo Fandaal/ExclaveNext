@@ -1466,6 +1466,9 @@ class ConfigurationFragment @JvmOverloads constructor(
             val profiles = targets ?: SagerDatabase.proxyDao.getByGroup(group.id)
             val profileCount = profiles.size
             var finished = 0
+            // Only profiles the chain actually resolved end up in the done
+            // snackbar — DNS errors, exceptions and Unknown answers do not.
+            val annotated = java.util.concurrent.atomic.AtomicInteger(0)
 
             io.nekohasekai.sagernet.bg.GeoIpAnnotator.ensureInit()
 
@@ -1500,6 +1503,7 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 profile.putBean(bean)
                                 profile.status = if (info.isKnown) 1 else 3
                                 profile.error = if (info.isKnown) info.tag() else "Unknown"
+                                if (info.isKnown) annotated.incrementAndGet()
                             } else {
                                 profile.status = 3
                                 profile.error = "DNS error"
@@ -1529,7 +1533,7 @@ class ConfigurationFragment @JvmOverloads constructor(
             onMainDispatcher {
                 test.binding.progressCircular.isGone = true
                 dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setText(android.R.string.ok)
-                snackbar(getString(R.string.annotate_done, profileCount)).show()
+                snackbar(getString(R.string.annotate_done, annotated.get())).show()
             }
         }
         test.cancel = {
