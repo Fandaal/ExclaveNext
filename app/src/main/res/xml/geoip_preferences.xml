@@ -2,11 +2,13 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <Preference
+        app:icon="@drawable/ic_baseline_layers_24"
         app:key="geoip_provider_chain"
         app:summary="@string/geoip_provider_chain_sum"
         app:title="@string/geoip_provider_chain" />
 
     <Preference
+        app:icon="@drawable/ic_baseline_rule_folder_24"
         app:key="geoip_local_databases"
         app:summary="@string/geoip_local_databases_sum"
         app:title="@string/geoip_local_databases" />

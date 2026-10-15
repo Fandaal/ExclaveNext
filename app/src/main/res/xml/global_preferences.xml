@@ -516,13 +516,15 @@
             app:title="@string/enable_pcap" />
         <EditTextPreference
             app:dialogMessage="Example: 127.0.0.1:6060\nOpen http://127.0.0.1:6060/debug/pprof in your browser."
+            app:icon="@drawable/ic_baseline_manage_search_24"
             app:key="pprofServer"
-            app:title="pprof server listening address"
+            app:title="@string/pprof_server_address"
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
             app:dialogMessage="For testing purpose only.\nBreaking changes are expected.\nNo guarantee of existence."
+            app:icon="@drawable/ic_baseline_running_with_errors_24"
             app:key="experimentalFlags"
-            app:title="Experimental flags" />
+            app:title="@string/experimental_flags" />
     </io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory>
 
     <io.nekohasekai.sagernet.widget.CollapsiblePreferenceCategory

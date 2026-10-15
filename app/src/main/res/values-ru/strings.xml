@@ -345,6 +345,8 @@
     <string name="experimental_no_termination_signal">Не отправлять одинарный дуплексный сигнал завершения соединения для TCP-соединения при передаче через VMess. Это нарушит работу некоторых приложений.</string>
     <string name="experimental_authenticated_length">Сделать длину каждого сегмента полезной нагрузки неизменяемым. Этот эксперимент требует, что бы клиент и сервер оба использовали одинаковую версию v2ray-core. Больше обновлений со временем.</string>
     <string name="experimental_settings">Экспериментально</string>
+    <string name="experimental_flags">Экспериментальные флаги</string>
+    <string name="pprof_server_address">Адрес pprof-сервера</string>
     <string name="route_need_vpn">Правило маршрутизации \"%s\" зависит от VPN, поэтому игнорируется.</string>
     <string name="route_for">Правило для %s</string>
     <string name="app_no_launcher">Это приложения не имеет интерфейса.</string>
