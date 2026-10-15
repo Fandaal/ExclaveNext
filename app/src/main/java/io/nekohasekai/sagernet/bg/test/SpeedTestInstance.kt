@@ -35,6 +35,8 @@ import kotlin.coroutines.suspendCoroutine
 data class SpeedResult(
     val pingMs: Int,
     val downloadMbps: Double,
+    /** Real exit IP seen by echo services through this profile, "" when unknown. */
+    val exitIp: String = "",
 ) {
     val alive: Boolean get() = pingMs > 0
 }
@@ -54,6 +56,10 @@ class SpeedTestInstance(
     private val downloadUrls: List<String>,
     private val timeoutMs: Int,
     private val maxDurationMs: Long,
+    /** When true, one echo GET after the ping reports the profile's real exit IP. */
+    private val probeExitIp: Boolean = false,
+    /** Echo URLs tried in order; the first valid IP answer wins. */
+    private val exitIpUrls: List<String> = emptyList(),
 ) : V2RayInstance(profile) {
 
     // The forTest config publishes a local SOCKS inbound; capture its port.
@@ -98,6 +104,44 @@ class SpeedTestInstance(
         return measure()
     }
 
+    /**
+     * One GET through the probe SOCKS to an echo service, returning the exit IP
+     * as a plain trimmed body, or "" when every URL failed. The URLs are tried
+     * in order and the first non-empty answer wins — same fallback semantics as
+     * the download URLs. Echo services are public and rate-limited, so the list
+     * is the resilience mechanism; the probe itself must stay cheap because it
+     * runs once per profile inside the speed test.
+     */
+    private fun probeExitIpFrom(urls: List<String>): String {
+        for (url in urls) {
+            try {
+                val conn = URL(url).openConnection(proxy()) as HttpURLConnection
+                conn.connectTimeout = timeoutMs
+                conn.readTimeout = timeoutMs
+                conn.requestMethod = "GET"
+                conn.connect()
+                val body = conn.inputStream.use { it.readBytes().decodeToString().trim() }
+                conn.disconnect()
+                // An echo service answers with the IP alone (possibly with a
+                // trailing newline); anything longer is a wrong endpoint, not
+                // an IP — skip it rather than annotate with garbage.
+                val candidate = body.lineSequence().firstOrNull { it.isNotBlank() } ?: continue
+                if (candidate.length <= 45 && candidate.matches(IP_REGEX)) return candidate
+            } catch (_: Exception) {
+                // Next mirror; a dead echo service must not fail the speed test.
+            }
+        }
+        return ""
+    }
+
+    companion object {
+        // IPv4 plus all IPv6 textual forms (hextet groups, embedded IPv4,
+        // leading "::" compression). Length-capped upstream at 45 (RFC 4291).
+        private val IP_REGEX = Regex(
+            "([0-9]{1,3}(\\.[0-9]{1,3}){3})|([0-9A-Fa-f:]{2,45})"
+        )
+    }
+
     private suspend fun startCore() {
         suspendCoroutine { c: Continuation<Unit> ->
             processes = GuardedProcessPool {
@@ -140,6 +184,15 @@ class SpeedTestInstance(
             return SpeedResult(0, 0.0)
         }
 
+        // --- exit IP (optional) ---
+        // Probed right after the ping, BEFORE the download: the download can
+        // take the whole maxDuration and must not delay the exit-IP answer.
+        // Only a live profile is probed — a dead one has no exit at all.
+        var exitIp = ""
+        if (probeExitIp && exitIpUrls.isNotEmpty()) {
+            exitIp = probeExitIpFrom(exitIpUrls)
+        }
+
         // --- download ---
         // Try the URLs in order: a mirror that is unreachable (or resets mid-way)
         // from this proxy must not zero the measurement — the next one is tried.
@@ -171,7 +224,7 @@ class SpeedTestInstance(
         }
         val elapsedSec = (System.currentTimeMillis() - dlStart) / 1000.0
         val mbps = if (elapsedSec > 0) (downloaded * 8.0) / (1024 * 1024) / elapsedSec else 0.0
-        return SpeedResult(pingMs, (Math.round(mbps * 10) / 10.0))
+        return SpeedResult(pingMs, (Math.round(mbps * 10) / 10.0), exitIp)
     }
 
     private fun InputStream.readBytesLimited(limit: Int) {

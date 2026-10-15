@@ -292,6 +292,11 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var speedTestTimeout by configurationStore.stringToIntIfExists(Key.SPEED_TEST_TIMEOUT) { SPEED_TEST_TIMEOUT.toInt() }
     var speedDlSizeMb by configurationStore.stringToIntIfExists(Key.SPEED_DL_SIZE_MB) { SPEED_DL_SIZE_MB }
     var speedDlTestUrls by configurationStore.string(Key.SPEED_DL_TEST_URLS) { SPEED_DL_TEST_URLS }
+    // Exclave Next: optional exit-IP probe inside the speed test. When enabled,
+    // each live profile is also asked for its real exit IP through an echo
+    // service and the answer is annotated into the display name as a geo tag.
+    var speedExitIpEnabled by configurationStore.boolean(Key.SPEED_EXIT_IP_ENABLED) { SPEED_EXIT_IP_ENABLED }
+    var speedExitIpUrls by configurationStore.string(Key.SPEED_EXIT_IP_URLS) { SPEED_EXIT_IP_URLS }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
     var showGroupName by configurationStore.boolean(Key.SHOW_GROUP_NAME)
 

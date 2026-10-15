@@ -109,6 +109,11 @@
     <string name="speed_test_dl_size_invalid">Размер загрузки должен быть положительным целым числом</string>
     <string name="speed_test_dl_urls">URL-адреса теста скорости</string>
     <string name="speed_test_dl_urls_sum">Список через точку с запятой, опробуется по порядку. {size} заменяется на размер в байтах, {size_mb} — на размер в МБ. Оба плейсхолдера необязательны.</string>
+    <!-- Exclave Next: exit-IP probe inside the speed test -->
+    <string name="speed_exit_ip_enabled">Аннотировать GeoIP по выходному IP</string>
+    <string name="speed_exit_ip_enabled_sum">Во время теста скорости спросить у echo-сервиса реальный выходной IP каждого живого профиля и записать тег страны/провайдера в имя. Требуется провайдер в Настройки → GeoIP.</string>
+    <string name="speed_exit_ip_urls">Echo-URL выходного IP</string>
+    <string name="speed_exit_ip_urls_sum">Список через точку с запятой, опробуется по порядку. Каждый должен отвечать IP вызывающего в виде простого текста.</string>
     <string name="port_transproxy">Порт транспрокси</string>
     <string name="port_proxy">Порт прокси SOCKS5</string>
     <string name="service_mode_vpn">VPN</string>

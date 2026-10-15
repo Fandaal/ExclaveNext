@@ -327,6 +327,29 @@ object GeoIpAnnotator {
     }
 
     /**
+     * Compose the display name for a speed test that also learned the profile's
+     * real exit IP, in the canonical layout:
+     *   "🏁 🇩🇪 Germany (Hetzner) ↓22.2"
+     * marker, then the profile name, then the geo tag, then the trailing ↓N —
+     * the SAME order transferAnnotations() writes. The order is load-bearing:
+     * stripSpeedMarker() only removes a ↓N anchored to the END of the string,
+     * so a tag written after the value would make the next run stack values.
+     *
+     * A KNOWN [info] REPLACES the old geo tag; an UNKNOWN one (echo probe
+     * failed) keeps the old tag — one dead echo service must not erase an
+     * annotation a previous run established. A null [mbps] (ping never passed)
+     * omits the arrow, and so does a measured zero.
+     */
+    fun composeSpeedNameWithGeo(name: String, marker: String, mbps: Double?, info: GeoInfo): String {
+        val stripped = stripSpeedMarker(name)
+        val base = withoutSpeedEmoji(if (info.isKnown) stripGeoTag(stripped) else stripped).trim()
+        val withGeo = if (info.isKnown) "$base ${info.tag()}".trim() else base
+        val head = if (marker.isEmpty()) withGeo else "$marker $withGeo".trim()
+        val value = mbps?.takeIf { it > 0.0 }?.let { "↓$it" } ?: ""
+        return "$head $value".trim()
+    }
+
+    /**
      * Carry a profile's geo/speed annotations from [oldName] onto a [freshName]
      * coming from a subscription refresh, so updating a subscription does not
      * wipe the user's annotations. Returns the fresh name wrapped with the old

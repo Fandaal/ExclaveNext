@@ -1672,6 +1672,16 @@ class ConfigurationFragment @JvmOverloads constructor(
                 }
                 .ifEmpty { listOf("https://speed.cloudflare.com/__down?bytes=${sizeMb * 1024 * 1024}") }
 
+            // Exclave Next: optional exit-IP probe. When enabled, every live
+            // profile is asked for its real exit IP through an echo service and
+            // the answer is looked up through the GeoIP chain and written into
+            // the display name as the same geo tag annotateGeoip() writes.
+            val probeExitIp = DataStore.speedExitIpEnabled &&
+                    io.nekohasekai.sagernet.bg.GeoIpAnnotator.isChainUsable()
+            val exitIpUrls = DataStore.speedExitIpUrls.split(';')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+
             val queue = ConcurrentLinkedQueue(profiles)
             val jobs = mutableListOf<Job>()
             // Single worker by default (parallel probes split the bandwidth and
@@ -1686,14 +1696,15 @@ class ConfigurationFragment @JvmOverloads constructor(
                         test.insert(profile)
                         try {
                             val result = io.nekohasekai.sagernet.bg.test.SpeedTestInstance(
-                                profile, pingUrl, downloadUrls, timeout, maxDuration
+                                profile, pingUrl, downloadUrls, timeout, maxDuration,
+                                probeExitIp, exitIpUrls
                             ).use { it.doTest() }
 
                             if (result.alive) {
                                 profile.status = 1
                                 profile.ping = result.pingMs
                                 profile.error = "${result.downloadMbps} Mb/s"
-                                // Compose "<emoji> <name...> ↓<Mbps>" in one place, so
+                                // Compose "<emoji> <name...> <geo> ↓<Mbps>" in one place, so
                                 // both the marker and the value are replaced on every
                                 // run and never stack. Re-running uses the canonical
                                 // GeoIpAnnotator helpers instead of its own regex.
@@ -1708,8 +1719,21 @@ class ConfigurationFragment @JvmOverloads constructor(
                                 val bean = profile.requireBean()
                                 // Zero downloads are dropped by composeSpeedName
                                 // itself — the rule lives in one place only.
+                                // With the exit-IP probe enabled, the looked-up
+                                // geo info rides along in the same pass: a KNOWN
+                                // answer replaces the old tag, an UNKNOWN one
+                                // (probe failed) keeps whatever was there.
+                                val info = if (probeExitIp && result.exitIp.isNotEmpty()) {
+                                    try {
+                                        io.nekohasekai.sagernet.bg.GeoIpAnnotator.lookup(result.exitIp)
+                                    } catch (_: Exception) {
+                                        io.nekohasekai.sagernet.bg.GeoInfo.UNKNOWN
+                                    }
+                                } else {
+                                    io.nekohasekai.sagernet.bg.GeoInfo.UNKNOWN
+                                }
                                 bean.name = io.nekohasekai.sagernet.bg.GeoIpAnnotator
-                                    .composeSpeedName(bean.name ?: "", marker, result.downloadMbps)
+                                    .composeSpeedNameWithGeo(bean.name ?: "", marker, result.downloadMbps, info)
                                 profile.putBean(bean)
                             } else {
                                 profile.status = 3

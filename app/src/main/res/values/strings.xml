@@ -105,6 +105,12 @@
     <string name="speed_test_dl_urls">Speed test download URLs</string>
     <string name="speed_test_dl_urls_sum">Semicolon-separated list, tried in order. {size} is replaced with the size in bytes, {size_mb} with the size in MB. Both placeholders are optional.</string>
     <string name="speed_dl_test_urls_default" translatable="false">https://speed.cloudflare.com/__down?bytes={size};http://ipv4.download.thinkbroadband.com/{size_mb}MB.zip</string>
+    <!-- Exclave Next: exit-IP probe inside the speed test -->
+    <string name="speed_exit_ip_enabled">Annotate GeoIP from the exit IP</string>
+    <string name="speed_exit_ip_enabled_sum">During the speed test, ask an echo service for each live profile\u2019s real exit IP and write the country / provider tag into the name. Needs a GeoIP provider in Settings → GeoIP.</string>
+    <string name="speed_exit_ip_urls">Exit IP echo URLs</string>
+    <string name="speed_exit_ip_urls_sum">Semicolon-separated list, tried in order. Each must answer with the caller\u2019s IP as plain text.</string>
+    <string name="speed_exit_ip_urls_default" translatable="false">https://api.ipify.org;https://ifconfig.me/ip;https://ipinfo.io/ip</string>
     <string name="action_annotate_geoip">Annotate country / ISP</string>
     <string name="action_resolve_domains">Resolve domains to IP</string>
     <string name="resolve_done">Resolved %1$d of %2$d profiles</string>

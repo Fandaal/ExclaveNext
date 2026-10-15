@@ -33,6 +33,12 @@ const val SPEED_TEST_TIMEOUT = 5000L
 const val SPEED_DL_SIZE_MB = 10
 const val SPEED_DL_TEST_URLS = "https://speed.cloudflare.com/__down?bytes={size};http://ipv4.download.thinkbroadband.com/{size_mb}MB.zip"
 
+// Exit-IP probe inside the speed test (Exclave Next). Echo services that
+// answer with the caller's IP as a plain text body; tried in order, the first
+// valid IP wins. Semicolon-separated like SPEED_DL_TEST_URLS.
+const val SPEED_EXIT_IP_ENABLED = false
+const val SPEED_EXIT_IP_URLS = "https://api.ipify.org;https://ifconfig.me/ip;https://ipinfo.io/ip"
+
 object Key {
 
     const val DB_PUBLIC = "configuration.db"
@@ -105,6 +111,8 @@ object Key {
     const val SPEED_TEST_TIMEOUT = "speedTestTimeout"
     const val SPEED_DL_SIZE_MB = "speedDlSizeMb"
     const val SPEED_DL_TEST_URLS = "speedDlTestUrls"
+    const val SPEED_EXIT_IP_ENABLED = "speedExitIpEnabled"
+    const val SPEED_EXIT_IP_URLS = "speedExitIpUrls"
     const val PROBE_URL = "probeUrl"
     const val PROBE_INTERVAL = "probeInterval"
 

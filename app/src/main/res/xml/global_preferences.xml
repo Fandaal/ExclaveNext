@@ -116,6 +116,20 @@
             app:singleLineTitle="false"
             app:title="@string/speed_test_dl_urls"
             app:useSimpleSummaryProvider="true" />
+        <SwitchPreference
+            app:defaultValue="false"
+            app:icon="@drawable/baseline_public_24"
+            app:key="speedExitIpEnabled"
+            app:summary="@string/speed_exit_ip_enabled_sum"
+            app:title="@string/speed_exit_ip_enabled" />
+        <EditTextPreference
+            app:defaultValue="@string/speed_exit_ip_urls_default"
+            app:icon="@drawable/ic_baseline_link_24"
+            app:key="speedExitIpUrls"
+            app:singleLineTitle="false"
+            app:summary="@string/speed_exit_ip_urls_sum"
+            app:title="@string/speed_exit_ip_urls"
+            app:useSimpleSummaryProvider="true" />
         <EditTextPreference
             app:dialogMessage="@string/one_per_line"
             app:icon="@drawable/ic_hardware_router"
